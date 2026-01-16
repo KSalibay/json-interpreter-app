@@ -1,0 +1,77 @@
+{
+  "experiment_type": "continuous",
+  "frame_rate": 60,
+  "duration": 10,
+  "update_interval": 500,
+  "transition_settings": {
+    "duration_ms": 200,
+    "type": "both"
+  },
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "display_parameters": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#000000"
+  },
+  "aperture_parameters": {
+    "aperture_shape": "circle",
+    "aperture_size": 300
+  },
+  "dot_parameters": {
+    "dot_size": 4,
+    "dot_color": "#ffffff",
+    "total_dots": 150
+  },
+  "motion_parameters": {
+    "lifetime_frames": 60
+  },
+  "timing_parameters": {
+    "fixation_duration": 0,
+    "stimulus_duration": 500,
+    "response_deadline": 500,
+    "inter_trial_interval": 0
+  },
+  "response_parameters": {
+    "require_response": false,
+    "response_device": "keyboard",
+    "choices": ["f", "j"],
+    "key_mapping": {
+      "f": "left",
+      "j": "right"
+    },
+    "end_condition_on_response": false,
+    "feedback": {
+      "enabled": true,
+      "type": "arrow",
+      "duration_ms": 150
+    }
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 700px; margin: 0 auto;\"><h2>Sample continuous</h2><p>Responses do <b>not</b> end the segment (end_condition_on_response=false).</p><p>Each segment ends at its deadline and shows a brief transition.</p><p>Press any key to start.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "block",
+      "component_type": "rdm-trial",
+      "length": 10,
+      "sampling_mode": "per-trial",
+      "parameter_windows": {
+        "coherence": {"min": 0.1, "max": 0.9},
+        "speed": {"min": 2, "max": 6}
+      },
+      "parameter_values": {
+        "direction": [0, 180],
+        "transition_duration": 200,
+        "transition_type": "both"
+      },
+      "seed": 123
+    }
+  ]
+}

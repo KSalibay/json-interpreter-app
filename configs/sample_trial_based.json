@@ -1,0 +1,65 @@
+{
+  "experiment_type": "trial-based",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "display_parameters": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#000000"
+  },
+  "aperture_parameters": {
+    "aperture_shape": "circle",
+    "aperture_size": 300
+  },
+  "dot_parameters": {
+    "dot_size": 4,
+    "dot_color": "#ffffff",
+    "total_dots": 150
+  },
+  "motion_parameters": {
+    "lifetime_frames": 60
+  },
+  "timing_parameters": {
+    "fixation_duration": 300,
+    "stimulus_duration": 800,
+    "response_deadline": 1200,
+    "inter_trial_interval": 400
+  },
+  "response_parameters": {
+    "require_response": true,
+    "response_device": "keyboard",
+    "choices": ["f", "j"],
+    "key_mapping": {
+      "f": "left",
+      "j": "right"
+    },
+    "feedback": {
+      "enabled": true,
+      "type": "corner-text",
+      "duration_ms": 400
+    }
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 700px; margin: 0 auto;\"><h2>Sample trial-based</h2><p>Press F for left, J for right.</p><p>Press any key to start.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "rdm-trial",
+      "coherence": 0.6,
+      "direction": 0,
+      "speed": 4
+    },
+    {
+      "type": "rdm-trial",
+      "coherence": 0.6,
+      "direction": 180,
+      "speed": 4
+    }
+  ]
+}

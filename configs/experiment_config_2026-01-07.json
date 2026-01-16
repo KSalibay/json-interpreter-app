@@ -1,0 +1,165 @@
+{
+  "experiment_type": "continuous",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "mouse-tracking": false,
+    "keyboard-tracking": false,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "This is an experiment which consists of the Random Dot Motion task. Please respond to the stimuli by pressing keys Left Arrow and Right Arrow. Press any key to continue.",
+      "choices": "ArrowLeft,ArrowRight",
+      "prompt": "",
+      "response_ends_trial": true
+    },
+    {
+      "type": "rdm-dot-groups",
+      "enable_groups": true,
+      "group_1_percentage": 50,
+      "group_1_color": "#feb4d1",
+      "group_1_coherence": 0.2,
+      "group_2_percentage": 50,
+      "group_2_color": "#c2daff",
+      "group_2_coherence": 0.8,
+      "total_dots": 200,
+      "aperture_diameter": 350
+    },
+    {
+      "type": "rdm-trial",
+      "canvas_width": 600,
+      "canvas_height": 600,
+      "aperture_shape": "circle",
+      "aperture_size": 300,
+      "background_color": "#404040",
+      "dot_size": 4,
+      "dot_color": "#94a6ff",
+      "total_dots": 150,
+      "coherence": 0.5,
+      "coherent_direction": 0,
+      "speed": 8,
+      "lifetime_frames": 60,
+      "noise_type": "random_direction",
+      "direction": 0,
+      "stimulus_duration": 1500,
+      "trial_duration": 3000,
+      "transition_duration": 500,
+      "dot_color_hex": "#94A6FF",
+      "aperture_diameter": 350
+    },
+    {
+      "canvas_width": 600,
+      "canvas_height": 600,
+      "aperture_shape": "circle",
+      "aperture_size": 300,
+      "background_color": "#404040",
+      "dot_size": 4,
+      "dot_color": "#ffffff",
+      "total_dots": 150,
+      "coherence": 0.5,
+      "coherent_direction": 0,
+      "speed": 5,
+      "lifetime_frames": 60,
+      "noise_type": "random_direction"
+    },
+    {
+      "type": "rdm-trial",
+      "coherence": 0.1,
+      "direction": 0,
+      "dot_color": "#FFFFFF",
+      "speed": 6,
+      "total_dots": 150,
+      "dot_size": 4,
+      "aperture_diameter": 350,
+      "stimulus_duration": 1500,
+      "trial_duration": 3000,
+      "transition_duration": 500,
+      "name": "Test - Low Coherence",
+      "color": "#FFFFFF"
+    },
+    {
+      "type": "rdm-trial",
+      "coherence": 0.5,
+      "direction": 180,
+      "dot_color": "#FFFFFF",
+      "speed": 6,
+      "total_dots": 150,
+      "dot_size": 4,
+      "aperture_diameter": 350,
+      "stimulus_duration": 1500,
+      "trial_duration": 3000,
+      "transition_duration": 500,
+      "name": "Test - Medium Coherence",
+      "color": "#FFFFFF"
+    },
+    {
+      "type": "rdm-trial",
+      "coherence": 0.9,
+      "direction": 0,
+      "dot_color": "#FFFFFF",
+      "speed": 6,
+      "total_dots": 150,
+      "dot_size": 4,
+      "aperture_diameter": 350,
+      "stimulus_duration": 1500,
+      "trial_duration": 3000,
+      "transition_duration": 500,
+      "name": "Test - High Coherence",
+      "color": "#FFFFFF"
+    }
+  ],
+  "display_parameters": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#404040"
+  },
+  "aperture_parameters": {
+    "shape": "circle",
+    "diameter": 350,
+    "center_x": 300,
+    "center_y": 300
+  },
+  "dot_parameters": {
+    "total_dots": 150,
+    "dot_size": 4,
+    "dot_color": "#ffffff",
+    "lifetime_frames": 60
+  },
+  "motion_parameters": {
+    "coherence": 0.83,
+    "direction": 0,
+    "speed": 5,
+    "noise_type": "random_direction"
+  },
+  "timing_parameters": {
+    "fixation_duration": 500,
+    "stimulus_duration": 1500,
+    "response_deadline": 2500,
+    "inter_trial_interval": 1200
+  },
+  "response_parameters": {
+    "choices": [
+      "ArrowLeft",
+      "ArrowRight"
+    ],
+    "require_response": true,
+    "key_mapping": {
+      "ArrowLeft": "left",
+      "ArrowRight": "right"
+    }
+  },
+  "frame_rate": 60,
+  "duration": 30,
+  "update_interval": 16,
+  "display_settings": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#404040"
+  },
+  "response_keys": [
+    "ArrowLeft",
+    "ArrowRight"
+  ]
+}
