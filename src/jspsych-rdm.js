@@ -39,6 +39,14 @@ var jsPsychRdm = (function (jspsych) {
     };
   }
 
+  function expandKeyVariants(key) {
+    const k = (key || '').toString();
+    if (k.length === 1 && /[a-z]/i.test(k)) {
+      return [k.toLowerCase(), k.toUpperCase()];
+    }
+    return [k];
+  }
+
   function computeMouseSide(x, y, cx, cy, startAngleDeg, segments) {
     const dx = x - cx;
     const dy = y - cy;
@@ -123,6 +131,13 @@ var jsPsychRdm = (function (jspsych) {
 
       const correctSide = window.RDMEngine.computeCorrectSide(rdm);
 
+      // Detection Response Task (DRT) overlay (builder flag: detection_response_task_enabled)
+      const drtEnabled = rdm.detection_response_task_enabled === true;
+      const drtKey = ' ';
+      let drtShown = false;
+      let drtOnsetTs = null;
+      let drtRt = null;
+
       const endTrial = async (reason) => {
         if (ended) return;
         ended = true;
@@ -153,8 +168,14 @@ var jsPsychRdm = (function (jspsych) {
           end_reason: reason || null,
           ...(includeRt ? { rt_ms: rt } : {}),
           ...(includeAccuracy ? { accuracy: isCorrect } : {}),
-          ...(includeCorrectness ? { correctness: isCorrect } : {})
-        window.jsPsychRdm = JsPsychRdmPlugin;
+          ...(includeCorrectness ? { correctness: isCorrect } : {}),
+
+          ...(drtEnabled ? {
+            drt_enabled: true,
+            drt_shown: drtShown,
+            drt_rt_ms: drtRt
+          } : {})
+        };
 
         // Keep the trial params for analysis/debugging
         data.rdm_parameters = rdm;
@@ -242,23 +263,71 @@ var jsPsychRdm = (function (jspsych) {
       };
 
       let keyListener = null;
+      let keyListenerId = null;
       let mouseListener = null;
 
       const setupListeners = () => {
         if (responseDevice === 'keyboard') {
-          keyListener = (e) => {
-            const k = e.key;
-            if (choices === 'ALL_KEYS') {
-              const side = keyMapping && keyMapping[k] ? keyMapping[k] : null;
-              onResponse({ key: k, side });
-              return;
+          const normalizedKeyMapping = (() => {
+            const out = {};
+            if (keyMapping && typeof keyMapping === 'object') {
+              for (const [k, v] of Object.entries(keyMapping)) {
+                if (typeof k === 'string') {
+                  out[k] = v;
+                  out[k.toLowerCase()] = v;
+                }
+              }
             }
-            if (Array.isArray(choices) && choices.includes(k)) {
-              const side = keyMapping && keyMapping[k] ? keyMapping[k] : null;
-              onResponse({ key: k, side });
-            }
-          };
-          window.addEventListener('keydown', keyListener);
+            return out;
+          })();
+
+          const validResponses = (() => {
+            if (choices === 'ALL_KEYS') return 'ALL_KEYS';
+            const base = Array.isArray(choices)
+              ? Array.from(new Set(choices.flatMap(expandKeyVariants)))
+              : [];
+            return Array.from(new Set(base.concat(drtEnabled ? [drtKey] : [])));
+          })();
+
+          keyListenerId = this.jsPsych.pluginAPI.getKeyboardResponse({
+            callback_function: (info) => {
+              const rawKey = info && info.key !== undefined ? info.key : null;
+              const k = (typeof rawKey === 'string') ? rawKey : null;
+              const kLower = (typeof k === 'string') ? k.toLowerCase() : null;
+
+              // DRT uses spacebar and should not interfere with primary response keys.
+              if (drtEnabled && k === drtKey) {
+                if (drtShown && drtRt === null && drtOnsetTs) {
+                  drtRt = Math.round(nowMs() - drtOnsetTs);
+                }
+                return;
+              }
+
+              if (choices === 'ALL_KEYS') {
+                const side = (k && normalizedKeyMapping && normalizedKeyMapping[k])
+                  ? normalizedKeyMapping[k]
+                  : (kLower && normalizedKeyMapping && normalizedKeyMapping[kLower])
+                    ? normalizedKeyMapping[kLower]
+                    : null;
+                onResponse({ key: kLower || k, side });
+                return;
+              }
+              if (Array.isArray(choices) && k) {
+                const ok = choices.includes(k) || (kLower && choices.includes(kLower));
+                if (!ok) return;
+                const side = (normalizedKeyMapping && normalizedKeyMapping[k])
+                  ? normalizedKeyMapping[k]
+                  : (kLower && normalizedKeyMapping && normalizedKeyMapping[kLower])
+                    ? normalizedKeyMapping[kLower]
+                    : null;
+                onResponse({ key: kLower || k, side });
+              }
+            },
+            valid_responses: validResponses,
+            rt_method: 'performance',
+            persist: false,
+            allow_held_key: false
+          });
         } else if (responseDevice === 'mouse' || responseDevice === 'touch') {
           const mr = response.mouse_response || {};
           const segments = Number(mr.segments ?? 2);
@@ -278,9 +347,10 @@ var jsPsychRdm = (function (jspsych) {
       };
 
       const cleanupListeners = () => {
-        if (keyListener) window.removeEventListener('keydown', keyListener);
+        if (keyListenerId) this.jsPsych.pluginAPI.cancelKeyboardResponse(keyListenerId);
         if (mouseListener && canvas) canvas.removeEventListener('click', mouseListener);
         keyListener = null;
+        keyListenerId = null;
         mouseListener = null;
       };
 
@@ -289,6 +359,31 @@ var jsPsychRdm = (function (jspsych) {
         engine.start();
         startTs = nowMs();
         setupListeners();
+
+        // Schedule a single DRT event within the stimulus window.
+        if (drtEnabled) {
+          const minDelay = 300;
+          const maxDelay = Math.max(minDelay, Math.floor(stimulusDuration * 0.75));
+          const delay = minDelay + Math.floor(Math.random() * Math.max(1, (maxDelay - minDelay)));
+          this.jsPsych.pluginAPI.setTimeout(() => {
+            if (ended) return;
+            drtShown = true;
+            drtOnsetTs = nowMs();
+
+            const el = document.createElement('div');
+            el.id = 'drt-dot';
+            el.style.cssText = 'position:absolute; top: 18px; left: 18px; width: 14px; height: 14px; border-radius: 50%; background: #FFD23F; box-shadow: 0 0 0 3px rgba(0,0,0,0.3);';
+
+            const wrap = display_element.querySelector('#rdm-wrap');
+            if (wrap) {
+              wrap.style.position = 'relative';
+              wrap.appendChild(el);
+              this.jsPsych.pluginAPI.setTimeout(() => {
+                if (el && el.parentNode) el.remove();
+              }, 200);
+            }
+          }, delay);
+        }
 
         // stimulus phase
         if (Number.isFinite(stimulusDuration) && stimulusDuration > 0) {

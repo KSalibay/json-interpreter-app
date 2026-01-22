@@ -51,6 +51,14 @@
     return [];
   }
 
+  function expandKeyVariants(key) {
+    const k = (key || '').toString();
+    if (k.length === 1 && /[a-z]/i.test(k)) {
+      return [k.toLowerCase(), k.toUpperCase()];
+    }
+    return [k];
+  }
+
   class JsPsychRdmContinuousPlugin {
     constructor(jsPsych) {
       this.jsPsych = jsPsych;
@@ -102,6 +110,72 @@
       let startTs = nowMs();
       let ended = false;
 
+      const trialStartTs = nowMs();
+
+      // Per-frame summary fields (so CSV has one row per frame with these columns)
+      let frameResponseSide = null;
+      let frameResponseKey = null;
+      let frameRtMs = null;
+      let frameIsCorrect = null;
+
+      // Detection Response Task (DRT) state (per-frame)
+      const drtKey = ' ';
+      let drtActive = false;
+      let drtShown = false;
+      let drtOnsetTs = null;
+      let drtRt = null;
+      let drtTimeoutId = null;
+
+      const clearDrt = () => {
+        drtActive = false;
+        drtShown = false;
+        drtOnsetTs = null;
+        drtRt = null;
+        if (drtTimeoutId) {
+          window.clearTimeout(drtTimeoutId);
+          drtTimeoutId = null;
+        }
+        const existing = display_element.querySelector('#drt-dot');
+        if (existing && existing.parentNode) existing.remove();
+      };
+
+      const scheduleDrtForCurrentFrame = () => {
+        clearDrt();
+
+        const frame = getFrame(frameIndex);
+        const rdm = frame.rdm || {};
+        if (rdm.detection_response_task_enabled !== true) return;
+
+        drtActive = true;
+
+        const timing = frame.timing || {};
+        const deadline = safeNum(timing.response_deadline, safeNum(timing.stimulus_duration, updateInterval));
+
+        const minDelay = 300;
+        const maxDelay = Math.max(minDelay, Math.floor(Math.max(1, deadline) * 0.75));
+        const delay = minDelay + Math.floor(Math.random() * Math.max(1, (maxDelay - minDelay)));
+
+        drtTimeoutId = window.setTimeout(() => {
+          if (ended || !drtActive) return;
+
+          drtShown = true;
+          drtOnsetTs = nowMs();
+
+          const el = document.createElement('div');
+          el.id = 'drt-dot';
+          el.style.cssText = 'position:absolute; top: 18px; left: 18px; width: 14px; height: 14px; border-radius: 50%; background: #FFD23F; box-shadow: 0 0 0 3px rgba(0,0,0,0.3);';
+
+          const wrap = display_element.querySelector('#rdm-wrap');
+          if (wrap) {
+            wrap.style.position = 'relative';
+            wrap.appendChild(el);
+            window.setTimeout(() => {
+              if (el && el.parentNode) el.remove();
+            }, 200);
+          }
+        }, delay);
+      };
+
       const records = [];
 
       const getFrame = (idx) => frames[Math.max(0, Math.min(frames.length - 1, idx))];
@@ -140,15 +214,34 @@
         // Record end-of-frame even if no response
         records.push({
           frame_index: frameIndex,
+          event: 'frame_end',
+          t_ms: Math.round(nowMs() - trialStartTs),
           ended_reason: reason || 'advance',
           rdm,
           response,
-          correct_side: correctSide
+          correct_side: correctSide,
+          rt_ms: frameRtMs,
+          accuracy: frameIsCorrect,
+          correctness: frameIsCorrect,
+          response_side: frameResponseSide,
+          response_key: frameResponseKey,
+          ...(rdm.detection_response_task_enabled ? {
+            drt_enabled: true,
+            drt_shown: drtShown,
+            drt_rt_ms: drtRt
+          } : {})
         });
 
         frameIndex++;
         respondedThisFrame = false;
         startTs = nowMs();
+
+        frameResponseSide = null;
+        frameResponseKey = null;
+        frameRtMs = null;
+        frameIsCorrect = null;
+
+        clearDrt();
 
         if (frameIndex >= frames.length) {
           finish('completed');
@@ -178,6 +271,11 @@
 
         segmentStart = nowMs();
         lastAdvance = segmentStart;
+
+        scheduleDrtForCurrentFrame();
+
+        // New frame => restart keyboard mapping/choices.
+        setKeyboardListenerForCurrentFrame();
       };
 
       const finish = (reason) => {
@@ -237,11 +335,19 @@
       };
 
       // Responses
-      let keyListener = null;
+      let keyListenerId = null;
       let mouseListener = null;
 
       const handleResponse = (side, key) => {
         if (ended) return;
+
+        // DRT capture should not affect the main response.
+        if (drtActive && key === drtKey) {
+          if (drtShown && drtRt === null && drtOnsetTs) {
+            drtRt = Math.round(nowMs() - drtOnsetTs);
+          }
+          return;
+        }
 
         const frame = getFrame(frameIndex);
         const rdm = frame.rdm || {};
@@ -254,16 +360,22 @@
           respondedThisFrame = true;
           const rt = Math.round(nowMs() - startTs);
 
+          frameResponseSide = side;
+          frameResponseKey = key || null;
+          frameRtMs = rt;
+          frameIsCorrect = isCorrect;
+
           // Attach response to the latest record (or create a response record)
           records.push({
             frame_index: frameIndex,
             event: 'response',
+            t_ms: Math.round(nowMs() - trialStartTs),
             response_side: side,
             response_key: key || null,
             rt_ms: rt,
             correct_side: correctSide,
-            ...(dataCollection['accuracy'] ? { accuracy: isCorrect } : {}),
-            ...(dataCollection['correctness'] ? { correctness: isCorrect } : {})
+            accuracy: isCorrect,
+            correctness: isCorrect
           });
 
           if (isCorrect !== null) showFeedback(frame, isCorrect);
@@ -275,28 +387,94 @@
         }
       };
 
+      const setKeyboardListenerForCurrentFrame = () => {
+        if (keyListenerId) {
+          this.jsPsych.pluginAPI.cancelKeyboardResponse(keyListenerId);
+          keyListenerId = null;
+        }
+
+        const frame = getFrame(frameIndex);
+        const response = frame.response || {};
+        const responseDevice = response.response_device || 'keyboard';
+        if (responseDevice !== 'keyboard') return;
+
+        const choices = normalizeChoices(response);
+        const keyMapping = buildKeyMapping(response);
+
+        const normalizedKeyMapping = (() => {
+          const out = {};
+          if (keyMapping && typeof keyMapping === 'object') {
+            for (const [k, v] of Object.entries(keyMapping)) {
+              if (typeof k === 'string') {
+                out[k] = v;
+                out[k.toLowerCase()] = v;
+              }
+            }
+          }
+          return out;
+        })();
+
+        const validResponses = (() => {
+          if (choices === 'ALL_KEYS') return 'ALL_KEYS';
+          const base = Array.isArray(choices)
+            ? Array.from(new Set(choices.flatMap(expandKeyVariants)))
+            : [];
+          return Array.from(new Set(base.concat([drtKey])));
+        })();
+
+        keyListenerId = this.jsPsych.pluginAPI.getKeyboardResponse({
+          callback_function: (info) => {
+            const rawKey = info && info.key !== undefined ? info.key : null;
+            const k = (typeof rawKey === 'string') ? rawKey : null;
+            const kLower = (typeof k === 'string') ? k.toLowerCase() : null;
+
+            // DRT capture should not affect the main response.
+            if (drtActive && k === drtKey) {
+              if (drtShown && drtRt === null && drtOnsetTs) {
+                drtRt = Math.round(nowMs() - drtOnsetTs);
+              }
+              return;
+            }
+
+            if (choices === 'ALL_KEYS') {
+              const side = (k && normalizedKeyMapping && normalizedKeyMapping[k])
+                ? normalizedKeyMapping[k]
+                : (kLower && normalizedKeyMapping && normalizedKeyMapping[kLower])
+                  ? normalizedKeyMapping[kLower]
+                  : null;
+              const rtOverride = (info && Number.isFinite(info.rt)) ? Math.round(info.rt) : null;
+              if (rtOverride !== null) startTs = nowMs() - rtOverride;
+              handleResponse(side, kLower || k);
+              return;
+            }
+
+            if (Array.isArray(choices) && k) {
+              const ok = choices.includes(k) || (kLower && choices.includes(kLower));
+              if (!ok) return;
+              const side = (normalizedKeyMapping && normalizedKeyMapping[k])
+                ? normalizedKeyMapping[k]
+                : (kLower && normalizedKeyMapping && normalizedKeyMapping[kLower])
+                  ? normalizedKeyMapping[kLower]
+                  : null;
+              const rtOverride = (info && Number.isFinite(info.rt)) ? Math.round(info.rt) : null;
+              if (rtOverride !== null) startTs = nowMs() - rtOverride;
+              handleResponse(side, kLower || k);
+            }
+          },
+          valid_responses: validResponses,
+          rt_method: 'performance',
+          persist: true,
+          allow_held_key: false
+        });
+      };
+
       const setupListeners = () => {
         const frame = getFrame(frameIndex);
         const response = frame.response || {};
         const responseDevice = response.response_device || 'keyboard';
 
         if (responseDevice === 'keyboard') {
-          const choices = normalizeChoices(response);
-          const keyMapping = buildKeyMapping(response);
-
-          keyListener = (e) => {
-            const k = e.key;
-            if (choices === 'ALL_KEYS') {
-              const side = keyMapping && keyMapping[k] ? keyMapping[k] : null;
-              handleResponse(side, k);
-              return;
-            }
-            if (Array.isArray(choices) && choices.includes(k)) {
-              const side = keyMapping && keyMapping[k] ? keyMapping[k] : null;
-              handleResponse(side, k);
-            }
-          };
-          window.addEventListener('keydown', keyListener);
+          setKeyboardListenerForCurrentFrame();
           return;
         }
 
@@ -330,9 +508,9 @@
       };
 
       const cleanupListeners = () => {
-        if (keyListener) window.removeEventListener('keydown', keyListener);
+        if (keyListenerId) this.jsPsych.pluginAPI.cancelKeyboardResponse(keyListenerId);
         if (mouseListener) canvas.removeEventListener('click', mouseListener);
-        keyListener = null;
+        keyListenerId = null;
         mouseListener = null;
       };
 
@@ -342,6 +520,11 @@
       fromRdm = firstRdm;
       toRdm = firstRdm;
       engine.applyDynamicsFromParams(firstRdm);
+
+      scheduleDrtForCurrentFrame();
+
+      // Ensure keyboard listener exists for first frame, and refresh it as frames advance.
+      setKeyboardListenerForCurrentFrame();
 
       requestAnimationFrame(tick);
     }

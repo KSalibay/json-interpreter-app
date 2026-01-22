@@ -1,0 +1,35 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "flanker",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "AAA1111 • Flanker (5 trials)\n\nPress F for left, J for right. Respond to the CENTER arrow.\n\nPress any key to begin.",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "block",
+      "component_type": "flanker-trial",
+      "length": 5,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "stimulus_type": "arrows",
+        "target_direction": ["left", "right"],
+        "congruency": ["congruent", "incongruent", "neutral"],
+        "left_key": "f",
+        "right_key": "j",
+        "stimulus_duration_ms": 500,
+        "trial_duration_ms": 1000,
+        "iti_ms": 200,
+        "detection_response_task_enabled": false
+      },
+      "seed": 1111
+    }
+  ]
+}

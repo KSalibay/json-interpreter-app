@@ -1,0 +1,86 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "rdm",
+  "frame_rate": 60,
+  "duration": 2,
+  "update_interval": 250,
+  "transition_settings": {
+    "duration_ms": 150,
+    "type": "both"
+  },
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "display_parameters": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#000000"
+  },
+  "aperture_parameters": {
+    "aperture_shape": "circle",
+    "aperture_size": 300
+  },
+  "dot_parameters": {
+    "dot_size": 4,
+    "total_dots": 160
+  },
+  "motion_parameters": {
+    "lifetime_frames": 60
+  },
+  "timing_parameters": {
+    "fixation_duration": 0,
+    "stimulus_duration": 2500,
+    "response_deadline": 2500,
+    "inter_trial_interval": 0
+  },
+  "response_parameters": {
+    "require_response": false,
+    "response_device": "keyboard",
+    "choices": ["f", "j"],
+    "key_mapping": {
+      "f": "left",
+      "j": "right"
+    },
+    "end_condition_on_response": false,
+    "feedback": {
+      "enabled": true,
+      "type": "corner-text",
+      "duration_ms": 1500
+    }
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 760px; margin: 0 auto; text-align:left;\"><h2>AAA1111 • RDM dot-groups (5 frames)</h2><p>This is a tiny continuous-mode dot-groups test.</p><p>Press any key to start.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "block",
+      "component_type": "rdm-dot-groups",
+      "length": 5,
+      "sampling_mode": "per-trial",
+      "parameter_windows": {
+        "group_1_percentage": {"min": 35, "max": 65},
+        "group_1_coherence": {"min": 0.2, "max": 0.8},
+        "group_2_coherence": {"min": 0.2, "max": 0.8},
+        "group_1_speed": {"min": 2.0, "max": 6.0},
+        "group_2_speed": {"min": 2.0, "max": 6.0}
+      },
+      "parameter_values": {
+        "group_1_direction": [0, 45, 90],
+        "group_2_direction": [180, 225, 270],
+        "group_1_color": "#FF0066",
+        "group_2_color": "#0066FF",
+        "response_target_group": 1,
+        "cue_border_mode": "target-group-color",
+        "cue_border_width": 4,
+        "transition_duration": 150,
+        "transition_type": "both"
+      },
+      "seed": 1113
+    }
+  ]
+}

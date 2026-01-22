@@ -119,8 +119,9 @@
     if (!isObject(config)) throw new Error('Config must be an object');
 
     const experimentType = config.experiment_type || 'trial-based';
+    const taskType = config.task_type || 'rdm';
 
-    const baseRdmParams = {
+    const baseRdmParams = normalizeRdmParams({
       ...(isObject(config.display_settings) ? config.display_settings : {}),
       ...(isObject(config.display_parameters) ? config.display_parameters : {}),
       ...(isObject(config.aperture_parameters) ? config.aperture_parameters : {}),
@@ -132,10 +133,10 @@
       ...(Number.isFinite(config.frame_rate) ? { frame_rate: config.frame_rate } : {}),
       ...(Number.isFinite(config.duration) ? { duration: config.duration } : {}),
       ...(Number.isFinite(config.update_interval) ? { update_interval: config.update_interval } : {})
-    };
+    });
 
     const responseDefaults = isObject(config.response_parameters) ? config.response_parameters : {};
-    const dataCollection = isObject(config.data_collection) ? config.data_collection : {};
+    const dataCollection = normalizeDataCollection(config.data_collection);
 
     const defaultTransition = isObject(config.transition_settings) ? config.transition_settings : { duration_ms: 0, type: 'both' };
 
@@ -156,12 +157,27 @@
       for (const item of expanded) {
         const type = item.type;
 
-        if (type === 'html-keyboard-response') {
+        if (type === 'html-keyboard-response' || type === 'instructions') {
           // Keep instructions as their own trial.
           timeline.push({
             type: jsPsychHtmlKeyboardResponse,
             stimulus: item.stimulus || '',
             choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
+            data: { plugin_type: type }
+          });
+          continue;
+        }
+
+        if (type === 'survey-response') {
+          timeline.push({
+            type: window.jsPsychSurveyResponse,
+            title: item.title || 'Survey',
+            instructions: item.instructions || '',
+            submit_label: item.submit_label || 'Continue',
+            allow_empty_on_timeout: item.allow_empty_on_timeout === true,
+            timeout_ms: (item.timeout_ms === null || item.timeout_ms === undefined) ? null : Number(item.timeout_ms),
+            questions: Array.isArray(item.questions) ? item.questions : [],
+            detection_response_task_enabled: item.detection_response_task_enabled === true,
             data: { plugin_type: type }
           });
           continue;
@@ -181,11 +197,11 @@
             type: (typeof item.transition_type === 'string' && item.transition_type.trim()) ? item.transition_type : (defaultTransition.type || 'both')
           };
 
-          const rdm = {
+          const rdm = applyResponseDerivedRdmFields(normalizeRdmParams({
             ...baseRdmParams,
             ...itemCopy,
             experiment_type: 'continuous'
-          };
+          }), response);
 
           frames.push({
             rdm,
@@ -217,11 +233,26 @@
     for (const item of expanded) {
       const type = item.type;
 
-      if (type === 'html-keyboard-response') {
+        if (type === 'html-keyboard-response' || type === 'instructions') {
         timeline.push({
           type: jsPsychHtmlKeyboardResponse,
           stimulus: item.stimulus || '',
           choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
+          data: { plugin_type: type }
+        });
+        continue;
+      }
+
+      if (type === 'survey-response') {
+        timeline.push({
+          type: window.jsPsychSurveyResponse,
+          title: item.title || 'Survey',
+          instructions: item.instructions || '',
+          submit_label: item.submit_label || 'Continue',
+          allow_empty_on_timeout: item.allow_empty_on_timeout === true,
+          timeout_ms: (item.timeout_ms === null || item.timeout_ms === undefined) ? null : Number(item.timeout_ms),
+          questions: Array.isArray(item.questions) ? item.questions : [],
+          detection_response_task_enabled: item.detection_response_task_enabled === true,
           data: { plugin_type: type }
         });
         continue;
@@ -245,11 +276,11 @@
             }
           : { duration_ms: 0, type: 'none' };
 
-        const rdm = {
+        const rdm = applyResponseDerivedRdmFields(normalizeRdmParams({
           ...baseRdmParams,
           ...itemCopy,
           experiment_type: experimentType
-        };
+        }), response);
 
         timeline.push({
           type: window.jsPsychRdm,
@@ -264,6 +295,28 @@
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }
+        });
+        continue;
+      }
+
+      // Flanker task
+      if (type === 'flanker-trial') {
+        timeline.push({
+          ...item,
+          type: window.jsPsychFlanker,
+          post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
+          data: { plugin_type: type, task_type: 'flanker' }
+        });
+        continue;
+      }
+
+      // SART task
+      if (type === 'sart-trial') {
+        timeline.push({
+          ...item,
+          type: window.jsPsychSart,
+          post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
+          data: { plugin_type: type, task_type: 'sart' }
         });
         continue;
       }
@@ -283,6 +336,80 @@
     }
 
     return { experimentType, timeline };
+  }
+
+  function normalizeDataCollection(raw) {
+    // RDM builder exports booleans under keys like 'reaction-time'.
+    // Some example schemas use nested { reaction_time: { enabled: true } }.
+    if (!isObject(raw)) return {};
+
+    // If it already looks like the hyphenated boolean map, keep it.
+    if (
+      typeof raw['reaction-time'] === 'boolean' ||
+      typeof raw['accuracy'] === 'boolean' ||
+      typeof raw['correctness'] === 'boolean'
+    ) {
+      return raw;
+    }
+
+    const out = {};
+    if (isObject(raw.reaction_time) && typeof raw.reaction_time.enabled === 'boolean') out['reaction-time'] = raw.reaction_time.enabled;
+    if (isObject(raw.accuracy) && typeof raw.accuracy.enabled === 'boolean') out['accuracy'] = raw.accuracy.enabled;
+    if (isObject(raw.correctness) && typeof raw.correctness.enabled === 'boolean') out['correctness'] = raw.correctness.enabled;
+    if (isObject(raw['eye-tracking']) && typeof raw['eye-tracking'].enabled === 'boolean') out['eye-tracking'] = raw['eye-tracking'].enabled;
+    if (isObject(raw.eye_tracking) && typeof raw.eye_tracking.enabled === 'boolean') out['eye-tracking'] = raw.eye_tracking.enabled;
+    return out;
+  }
+
+  function normalizeRdmParams(params) {
+    const p = isObject(params) ? { ...params } : {};
+
+    // Builder commonly exports aperture parameters as { shape, diameter }.
+    if (p.aperture_shape === undefined && p.shape !== undefined) {
+      const s = String(p.shape).toLowerCase();
+      if (s === 'circle') p.aperture_shape = 'circle';
+      else if (s === 'square' || s === 'rectangle') p.aperture_shape = 'square';
+      else p.aperture_shape = 'circle';
+    }
+
+    // Use diameter as our "aperture_size" (engine interprets circle size as diameter).
+    if (p.aperture_size === undefined) {
+      if (p.aperture_diameter !== undefined) p.aperture_size = p.aperture_diameter;
+      else if (p.diameter !== undefined) p.aperture_size = p.diameter;
+    }
+
+    return p;
+  }
+
+  function applyResponseDerivedRdmFields(rdm, response) {
+    const out = isObject(rdm) ? { ...rdm } : {};
+    const resp = isObject(response) ? response : {};
+
+    // Map response-target-group (builder uses group_1/group_2 strings in overrides).
+    if (out.response_target_group === undefined && resp.response_target_group !== undefined) {
+      const raw = resp.response_target_group;
+      if (raw === 'group_1') out.response_target_group = 1;
+      else if (raw === 'group_2') out.response_target_group = 2;
+      else if (Number.isFinite(Number(raw))) out.response_target_group = Number(raw);
+    }
+
+    // Cue border: builder may export as response.cue_border = { enabled, mode, target_group, color, width }.
+    if (isObject(resp.cue_border) && resp.cue_border.enabled) {
+      const cue = resp.cue_border;
+      const width = Number(cue.width ?? cue.border_width ?? 3);
+
+      // The engine currently expects flat fields. We map any enabled cue to a custom border with explicit color.
+      out.cue_border_mode = 'custom';
+      if (Number.isFinite(width)) out.cue_border_width = width;
+      if (typeof cue.color === 'string') out.cue_border_color = cue.color;
+
+      if (out.response_target_group === undefined) {
+        if (cue.target_group === 'group_1') out.response_target_group = 1;
+        else if (cue.target_group === 'group_2') out.response_target_group = 2;
+      }
+    }
+
+    return out;
   }
 
   function escapeHtml(s) {

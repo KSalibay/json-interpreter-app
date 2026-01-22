@@ -151,11 +151,8 @@
       const isGroupsB = (b.type === 'rdm-dot-groups') || b.enable_groups === true || b.group_1_percentage !== undefined;
       if (isGroupsA !== isGroupsB) return true;
 
-      if (isGroupsA || isGroupsB) {
-        const g1a = String(a.group_1_percentage ?? '');
-        const g1b = String(b.group_1_percentage ?? '');
-        if (g1a !== g1b) return true;
-      }
+      // NOTE: group_1_percentage changes are handled dynamically during continuous rendering
+      // (we reassign dot groups without reinitializing the canvas).
 
       return false;
     }
@@ -180,6 +177,13 @@
       const isGroups = (b.type === 'rdm-dot-groups') || b.enable_groups === true || b.group_1_percentage !== undefined;
 
       if (isGroups) {
+        // Support smooth/dynamic group percentage changes without a full re-init.
+        const aPctRaw = Number(a.group_1_percentage ?? 50);
+        const bPctRaw = Number(b.group_1_percentage ?? aPctRaw);
+        const pct = clamp(lerp(aPctRaw, bPctRaw, t), 0, 100);
+        const desiredG1 = Math.round((pct / 100) * this.totalDots);
+        const desiredG2 = Math.max(0, this.totalDots - desiredG1);
+
         const aG1Color = parseColorToRgb(a.group_1_color, { r: 255, g: 0, b: 102 });
         const bG1Color = parseColorToRgb(b.group_1_color, aG1Color);
         const aG2Color = parseColorToRgb(a.group_2_color, { r: 0, g: 102, b: 255 });
@@ -211,6 +215,37 @@
 
         // keep cue border behavior current
         this.params = { ...(this.params || {}), ...(b || {}) };
+
+        // Adjust group membership counts without wiping the canvas (avoids white flash).
+        // We keep positions/lifetimes; only update group + per-dot parameters.
+        let currentG1 = 0;
+        let currentG2 = 0;
+        for (const d of this.dots) {
+          if (d.group === 1) currentG1++;
+          else if (d.group === 2) currentG2++;
+        }
+
+        if (currentG1 !== desiredG1 || currentG2 !== desiredG2) {
+          if (currentG1 < desiredG1) {
+            let need = desiredG1 - currentG1;
+            for (const d of this.dots) {
+              if (need <= 0) break;
+              if (d.group === 2) {
+                d.group = 1;
+                need--;
+              }
+            }
+          } else if (currentG1 > desiredG1) {
+            let need = currentG1 - desiredG1;
+            for (const d of this.dots) {
+              if (need <= 0) break;
+              if (d.group === 1) {
+                d.group = 2;
+                need--;
+              }
+            }
+          }
+        }
 
         for (const d of this.dots) {
           if (d.group === 1) {
