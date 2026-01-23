@@ -276,6 +276,9 @@
 
         // New frame => restart keyboard mapping/choices.
         setKeyboardListenerForCurrentFrame();
+
+        // New frame => ensure pointer listener mode/device matches.
+        setPointerListenerForCurrentFrame();
       };
 
       const finish = (reason) => {
@@ -337,6 +340,7 @@
       // Responses
       let keyListenerId = null;
       let mouseListener = null;
+      let mouseListenerEvent = null;
 
       const handleResponse = (side, key) => {
         if (ended) return;
@@ -468,50 +472,78 @@
         });
       };
 
-      const setupListeners = () => {
+      const setPointerListenerForCurrentFrame = () => {
+        // Always clear existing pointer listener so per-frame response_device/selection_mode changes work.
+        if (mouseListener && mouseListenerEvent) {
+          canvas.removeEventListener(mouseListenerEvent, mouseListener);
+        }
+        mouseListener = null;
+        mouseListenerEvent = null;
+
         const frame = getFrame(frameIndex);
         const response = frame.response || {};
         const responseDevice = response.response_device || 'keyboard';
 
-        if (responseDevice === 'keyboard') {
-          setKeyboardListenerForCurrentFrame();
-          return;
+        if (!(responseDevice === 'mouse' || responseDevice === 'touch')) return;
+
+        const mr = response.mouse_response || {};
+        const segments = Math.max(2, safeNum(mr.segments, 2));
+        const startAngle = safeNum(mr.start_angle_deg, 0);
+        const selectionModeRaw = (mr.selection_mode ?? mr.mode ?? 'click');
+        const selectionMode = (typeof selectionModeRaw === 'string' ? selectionModeRaw.trim().toLowerCase() : 'click');
+
+        const computeMouseSide = (x, y) => {
+          const cx = canvas.width / 2;
+          const cy = canvas.height / 2;
+          const dx = x - cx;
+          const dy = y - cy;
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const norm = (angle - startAngle + 360) % 360;
+          const seg = Math.floor((norm / 360) * segments);
+          if (segments === 2) return seg === 0 ? 'right' : 'left';
+          return seg < segments / 2 ? 'right' : 'left';
+        };
+
+        mouseListener = (e) => {
+          // Normalize pointer/mouse events
+          const clientX = e && typeof e.clientX === 'number' ? e.clientX : null;
+          const clientY = e && typeof e.clientY === 'number' ? e.clientY : null;
+          if (clientX === null || clientY === null) return;
+
+          const rect = canvas.getBoundingClientRect();
+          const x = clientX - rect.left;
+          const y = clientY - rect.top;
+
+          // Ignore if outside canvas bounds (defensive)
+          if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+
+          const side = computeMouseSide(x, y);
+          handleResponse(side, null);
+        };
+
+        // click = explicit click/tap; hover = continuous selection via pointer movement
+        if (selectionMode === 'hover' || selectionMode === 'mousemove') {
+          mouseListenerEvent = 'mousemove';
+        } else {
+          mouseListenerEvent = 'click';
         }
 
-        if (responseDevice === 'mouse' || responseDevice === 'touch') {
-          const mr = response.mouse_response || {};
-          const segments = Math.max(2, safeNum(mr.segments, 2));
-          const startAngle = safeNum(mr.start_angle_deg, 0);
+        canvas.addEventListener(mouseListenerEvent, mouseListener);
+      };
 
-          const computeMouseSide = (x, y) => {
-            const cx = canvas.width / 2;
-            const cy = canvas.height / 2;
-            const dx = x - cx;
-            const dy = y - cy;
-            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-            const norm = (angle - startAngle + 360) % 360;
-            const seg = Math.floor((norm / 360) * segments);
-            if (segments === 2) return seg === 0 ? 'right' : 'left';
-            return seg < segments / 2 ? 'right' : 'left';
-          };
-
-          mouseListener = (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const side = computeMouseSide(x, y);
-            handleResponse(side, null);
-          };
-
-          canvas.addEventListener('click', mouseListener);
-        }
+      const setupListeners = () => {
+        // Always call both; each function cancels its previous listener and
+        // only re-attaches if the current frame uses that device.
+        setKeyboardListenerForCurrentFrame();
+        setPointerListenerForCurrentFrame();
       };
 
       const cleanupListeners = () => {
         if (keyListenerId) this.jsPsych.pluginAPI.cancelKeyboardResponse(keyListenerId);
-        if (mouseListener) canvas.removeEventListener('click', mouseListener);
+        if (mouseListener && mouseListenerEvent) canvas.removeEventListener(mouseListenerEvent, mouseListener);
         keyListenerId = null;
         mouseListener = null;
+        mouseListenerEvent = null;
       };
 
       // Kick off
@@ -525,6 +557,9 @@
 
       // Ensure keyboard listener exists for first frame, and refresh it as frames advance.
       setKeyboardListenerForCurrentFrame();
+
+      // Ensure pointer listener matches the first frame.
+      setPointerListenerForCurrentFrame();
 
       requestAnimationFrame(tick);
     }

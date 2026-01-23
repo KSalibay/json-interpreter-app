@@ -265,6 +265,7 @@ var jsPsychRdm = (function (jspsych) {
       let keyListener = null;
       let keyListenerId = null;
       let mouseListener = null;
+      let mouseListenerEvent = null;
 
       const setupListeners = () => {
         if (responseDevice === 'keyboard') {
@@ -332,15 +333,22 @@ var jsPsychRdm = (function (jspsych) {
           const mr = response.mouse_response || {};
           const segments = Number(mr.segments ?? 2);
           const startAngle = Number(mr.start_angle_deg ?? 0);
+          const selectionModeRaw = (mr.selection_mode ?? mr.mode ?? 'click');
+          const selectionMode = (typeof selectionModeRaw === 'string' ? selectionModeRaw.trim().toLowerCase() : 'click');
 
           mouseListener = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const clientX = e && typeof e.clientX === 'number' ? e.clientX : null;
+            const clientY = e && typeof e.clientY === 'number' ? e.clientY : null;
+            if (clientX === null || clientY === null) return;
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
             const side = computeMouseSide(x, y, canvas.width / 2, canvas.height / 2, startAngle, segments);
             onResponse({ key: null, side });
           };
-          canvas.addEventListener('click', mouseListener);
+
+          mouseListenerEvent = (selectionMode === 'hover' || selectionMode === 'mousemove') ? 'mousemove' : 'click';
+          canvas.addEventListener(mouseListenerEvent, mouseListener);
         } else if (responseDevice === 'voice') {
           // Not implemented
         }
@@ -348,10 +356,11 @@ var jsPsychRdm = (function (jspsych) {
 
       const cleanupListeners = () => {
         if (keyListenerId) this.jsPsych.pluginAPI.cancelKeyboardResponse(keyListenerId);
-        if (mouseListener && canvas) canvas.removeEventListener('click', mouseListener);
+        if (mouseListener && canvas && mouseListenerEvent) canvas.removeEventListener(mouseListenerEvent, mouseListener);
         keyListener = null;
         keyListenerId = null;
         mouseListener = null;
+        mouseListenerEvent = null;
       };
 
       const startStimulus = () => {
