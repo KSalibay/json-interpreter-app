@@ -140,6 +140,8 @@
 
     const defaultTransition = isObject(config.transition_settings) ? config.transition_settings : { duration_ms: 0, type: 'both' };
 
+    const gaborDefaults = isObject(config.gabor_settings) ? config.gabor_settings : {};
+
     const baseIti = (() => {
       const tp = isObject(config.timing_parameters) ? config.timing_parameters : {};
       const iti = Number(tp.inter_trial_interval ?? config.default_iti ?? 0);
@@ -317,6 +319,30 @@
           type: window.jsPsychSart,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
           data: { plugin_type: type, task_type: 'sart' }
+        });
+        continue;
+      }
+
+      // Gabor task
+      if (type === 'gabor-trial') {
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+
+        timeline.push({
+          type: window.jsPsychGabor,
+
+          // Inherit experiment-wide gabor settings by default.
+          ...gaborDefaults,
+
+          // Allow per-trial overrides.
+          ...itemCopy,
+
+          data: {
+            plugin_type: type,
+            task_type: 'gabor',
+            _generated_from_block: !!item._generated_from_block,
+            _block_index: Number.isFinite(item._block_index) ? item._block_index : null
+          }
         });
         continue;
       }

@@ -1,0 +1,76 @@
+{
+  "task_type": "gabor",
+  "experiment_type": "trial-based",
+  "gabor_settings": {
+    "response_task": "discriminate_tilt",
+    "left_key": "f",
+    "right_key": "j",
+    "yes_key": "f",
+    "no_key": "j",
+
+    "high_value_color": "#00aa00",
+    "low_value_color": "#0066ff",
+
+    "fixation_ms": 800,
+    "placeholders_ms": 300,
+    "cue_ms": 250,
+    "cue_delay_min_ms": 100,
+    "cue_delay_max_ms": 200,
+
+    "stimulus_duration_ms": 67,
+    "mask_duration_ms": 67,
+
+    "response_window_ms": 1500
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "<p><b>Gabor Demo</b></p><p>Respond based on target tilt: left (f) vs right (j).</p><p>Press any key to start.</p>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "gabor-trial",
+      "target_location": "left",
+      "target_tilt_deg": -45,
+      "distractor_orientation_deg": 0,
+      "spatial_cue": "left",
+      "left_value": "high",
+      "right_value": "low"
+    },
+    {
+      "type": "gabor-trial",
+      "target_location": "right",
+      "target_tilt_deg": 45,
+      "distractor_orientation_deg": 0,
+      "spatial_cue": "right",
+      "left_value": "neutral",
+      "right_value": "high"
+    },
+    {
+      "type": "block",
+      "component_type": "gabor-trial",
+      "length": 6,
+      "seed": 12345,
+      "parameter_values": {
+        "response_task": "discriminate_tilt",
+        "left_key": "f",
+        "right_key": "j",
+        "target_location": ["left", "right"],
+        "target_tilt_deg": [-45, 45],
+        "distractor_orientation_deg": [0, 90],
+        "spatial_cue": ["none", "left", "right"],
+        "left_value": ["neutral", "high", "low"],
+        "right_value": ["neutral", "high", "low"]
+      },
+      "parameter_windows": {
+        "stimulus_duration_ms": { "min": 67, "max": 67 },
+        "mask_duration_ms": { "min": 67, "max": 67 }
+      }
+    },
+    {
+      "type": "instructions",
+      "stimulus": "<p>Done.</p><p>Press any key to finish.</p>",
+      "choices": "ALL_KEYS"
+    }
+  ]
+}

@@ -234,7 +234,7 @@
     });
   }
 
-  async function startExperiment(config) {
+  async function startExperiment(config, configId) {
     const compiled = window.TimelineCompiler.compileToJsPsychTimeline(config);
     setStatus(`Compiled timeline: ${compiled.timeline.length} items (${compiled.experimentType}). Starting...`);
 
@@ -270,6 +270,21 @@
         setStatus('Experiment finished (local mode). Data logged to console.');
       }
     });
+
+    // Ensure core identifiers are present on *every* row (useful for debug CSV/JSON).
+    // Multi-config mode already stamps these per trial since they change by config.
+    try {
+      const taskType = (config && config.task_type ? String(config.task_type) : 'task');
+      const experimentType = (config && config.experiment_type ? String(config.experiment_type) : (compiled.experimentType || 'trial-based'));
+      const cfgId = (typeof configId === 'string' && configId.trim()) ? configId.trim() : null;
+      jsPsych.data.addProperties({
+        task_type: taskType,
+        experiment_type: experimentType,
+        config_id: cfgId
+      });
+    } catch (e) {
+      console.warn('Failed to add global data properties:', e);
+    }
 
     jsPsych.run(compiled.timeline);
   }
@@ -385,7 +400,7 @@
 
       setStatus(`Loading config: ${id} ...`);
       window.ConfigLoader.loadConfigById(id, loaderOpts)
-        .then(({ config }) => startExperiment(config))
+        .then(({ config, id: loadedId }) => startExperiment(config, loadedId || id))
         .catch((e) => {
           console.error(e);
           setStatus(e && e.message ? e.message : String(e));
