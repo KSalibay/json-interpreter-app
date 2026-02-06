@@ -1,0 +1,47 @@
+{
+  "task_type": "rdm",
+  "experiment_type": "trial-based",
+
+  "display_settings": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#000000",
+    "dot_color": "#ffffff",
+    "dot_radius": 2,
+    "dot_count": 200,
+    "dot_speed": 4
+  },
+
+  "response_parameters": {
+    "choices": ["f", "j"],
+    "key_mapping": {
+      "f": "left",
+      "j": "right"
+    },
+    "require_response": true,
+    "response_device": "keyboard"
+  },
+
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "<div style=\"max-width: 780px; margin:0 auto; text-align:left;\">\n<h3>Adaptive demo: RDM staircase</h3>\n<p>Staircase adapts <code>coherence</code>. This config is single-task (RDM only) for compatibility with Builder validators.</p>\n<p>Press any key to begin.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+
+    {
+      "type": "block",
+      "component_type": "rdm-adaptive",
+      "length": 12,
+      "seed": 67890,
+      "parameter_windows": {
+        "initial_coherence": { "min": 0.2, "max": 0.4 },
+        "step_size": { "min": 0.04, "max": 0.08 }
+      },
+      "parameter_values": {
+        "algorithm": "staircase",
+        "target_performance": 0.75
+      }
+    }
+  ]
+}

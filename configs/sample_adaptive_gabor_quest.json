@@ -1,0 +1,49 @@
+{
+  "task_type": "gabor",
+  "experiment_type": "trial-based",
+
+  "gabor_settings": {
+    "spatial_frequency_cyc_per_px": 0.08,
+    "grating_waveform": "triangle",
+
+    "fixation_ms": 200,
+    "placeholders_ms": 200,
+    "cue_ms": 150,
+    "cue_delay_min_ms": 50,
+    "cue_delay_max_ms": 150,
+    "stimulus_duration_ms": 67,
+    "mask_duration_ms": 67,
+    "response_window_ms": 800
+  },
+
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "<div style=\"max-width: 780px; margin:0 auto; text-align:left;\">\n<h3>Adaptive demo: Gabor QUEST</h3>\n<p>QUEST adapts <code>target_tilt_deg</code>. This config is single-task (Gabor only) for compatibility with Builder validators.</p>\n<p>Press any key to begin.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+
+    {
+      "type": "block",
+      "component_type": "gabor-trial",
+      "length": 12,
+      "seed": 12345,
+      "parameter_windows": {
+        "target_tilt_deg": { "min": 2, "max": 30 }
+      },
+      "parameter_values": {
+        "response_task": "discriminate_tilt",
+        "adaptive": {
+          "mode": "quest",
+          "parameter": "target_tilt_deg",
+          "target_performance": 0.82,
+          "start_value": 10,
+          "start_sd": 5,
+          "beta": 3.5,
+          "gamma": 0.5,
+          "delta": 0.01
+        }
+      }
+    }
+  ]
+}

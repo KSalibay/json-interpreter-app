@@ -1,11 +1,35 @@
 (function (jspsych) {
+  const PT = (jspsych && jspsych.ParameterType)
+    || (window.jsPsychModule && window.jsPsychModule.ParameterType)
+    || (window.jsPsych && window.jsPsych.ParameterType)
+    || {
+      BOOL: 'BOOL',
+      STRING: 'STRING',
+      INT: 'INT',
+      FLOAT: 'FLOAT',
+      OBJECT: 'OBJECT',
+      KEY: 'KEY',
+      KEYS: 'KEYS',
+      SELECT: 'SELECT',
+      HTML_STRING: 'HTML_STRING',
+      COMPLEX: 'COMPLEX',
+      FUNCTION: 'FUNCTION',
+      TIMELINE: 'TIMELINE'
+    };
+
   const info = {
     name: 'rdm-continuous',
+    version: '1.0.0',
     parameters: {
-      frames: { type: jspsych.ParameterType.OBJECT, array: true, default: [] },
-      update_interval_ms: { type: jspsych.ParameterType.INT, default: 100 },
-      default_transition: { type: jspsych.ParameterType.OBJECT, default: { duration_ms: 150, type: 'both' } },
-      dataCollection: { type: jspsych.ParameterType.OBJECT, default: {} }
+      frames: { type: PT.OBJECT, array: true, default: [] },
+      update_interval_ms: { type: PT.INT, default: 100 },
+      default_transition: { type: PT.OBJECT, default: { duration_ms: 150, type: 'both' } },
+      dataCollection: { type: PT.OBJECT, default: {} }
+    },
+    data: {
+      records: { type: PT.OBJECT, array: true },
+      ended_reason: { type: PT.STRING },
+      plugin_version: { type: PT.STRING }
     }
   };
 
@@ -117,6 +141,9 @@
       let frameResponseKey = null;
       let frameRtMs = null;
       let frameIsCorrect = null;
+      let frameResponseAngleDeg = null;
+      let frameResponseAngleRawDeg = null;
+      let frameResponseSegmentIndex = null;
 
       // Detection Response Task (DRT) state (per-frame)
       const drtKey = ' ';
@@ -225,6 +252,9 @@
           correctness: frameIsCorrect,
           response_side: frameResponseSide,
           response_key: frameResponseKey,
+          response_angle_deg: frameResponseAngleDeg,
+          response_angle_raw_deg: frameResponseAngleRawDeg,
+          response_segment_index: frameResponseSegmentIndex,
           ...(rdm.detection_response_task_enabled ? {
             drt_enabled: true,
             drt_shown: drtShown,
@@ -240,6 +270,9 @@
         frameResponseKey = null;
         frameRtMs = null;
         frameIsCorrect = null;
+        frameResponseAngleDeg = null;
+        frameResponseAngleRawDeg = null;
+        frameResponseSegmentIndex = null;
 
         clearDrt();
 
@@ -342,7 +375,7 @@
       let mouseListener = null;
       let mouseListenerEvent = null;
 
-      const handleResponse = (side, key) => {
+      const handleResponse = (side, key, meta) => {
         if (ended) return;
 
         // DRT capture should not affect the main response.
@@ -368,6 +401,9 @@
           frameResponseKey = key || null;
           frameRtMs = rt;
           frameIsCorrect = isCorrect;
+          frameResponseAngleDeg = (meta && Number.isFinite(meta.angle_deg)) ? meta.angle_deg : null;
+          frameResponseAngleRawDeg = (meta && Number.isFinite(meta.raw_angle_deg)) ? meta.raw_angle_deg : null;
+          frameResponseSegmentIndex = (meta && Number.isFinite(meta.segment_index)) ? meta.segment_index : null;
 
           // Attach response to the latest record (or create a response record)
           records.push({
@@ -376,6 +412,9 @@
             t_ms: Math.round(nowMs() - trialStartTs),
             response_side: side,
             response_key: key || null,
+            response_angle_deg: frameResponseAngleDeg,
+            response_angle_raw_deg: frameResponseAngleRawDeg,
+            response_segment_index: frameResponseSegmentIndex,
             rt_ms: rt,
             correct_side: correctSide,
             accuracy: isCorrect,
@@ -448,7 +487,7 @@
                   : null;
               const rtOverride = (info && Number.isFinite(info.rt)) ? Math.round(info.rt) : null;
               if (rtOverride !== null) startTs = nowMs() - rtOverride;
-              handleResponse(side, kLower || k);
+              handleResponse(side, kLower || k, null);
               return;
             }
 
@@ -462,7 +501,7 @@
                   : null;
               const rtOverride = (info && Number.isFinite(info.rt)) ? Math.round(info.rt) : null;
               if (rtOverride !== null) startTs = nowMs() - rtOverride;
-              handleResponse(side, kLower || k);
+              handleResponse(side, kLower || k, null);
             }
           },
           valid_responses: validResponses,
@@ -492,16 +531,42 @@
         const selectionModeRaw = (mr.selection_mode ?? mr.mode ?? 'click');
         const selectionMode = (typeof selectionModeRaw === 'string' ? selectionModeRaw.trim().toLowerCase() : 'click');
 
-        const computeMouseSide = (x, y) => {
-          const cx = canvas.width / 2;
-          const cy = canvas.height / 2;
-          const dx = x - cx;
-          const dy = y - cy;
-          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-          const norm = (angle - startAngle + 360) % 360;
-          const seg = Math.floor((norm / 360) * segments);
-          if (segments === 2) return seg === 0 ? 'right' : 'left';
-          return seg < segments / 2 ? 'right' : 'left';
+        const frameRdm = (getFrame(frameIndex).rdm || {});
+        const apertureCx = safeNum(
+          frameRdm.aperture_center_x ?? frameRdm.center_x ?? (frameRdm.aperture_parameters && frameRdm.aperture_parameters.center_x),
+          canvas.width / 2
+        );
+        const apertureCy = safeNum(
+          frameRdm.aperture_center_y ?? frameRdm.center_y ?? (frameRdm.aperture_parameters && frameRdm.aperture_parameters.center_y),
+          canvas.height / 2
+        );
+        const apertureDiameter = Number(
+          frameRdm.aperture_diameter ??
+          frameRdm.apertureDiameter ??
+          (frameRdm.aperture_parameters && frameRdm.aperture_parameters.diameter) ??
+          (frameRdm.aperture_parameters && frameRdm.aperture_parameters.diameter_px) ??
+          NaN
+        );
+        const apertureRadius = Number.isFinite(apertureDiameter)
+          ? (apertureDiameter / 2)
+          : (Math.min(canvas.width, canvas.height) / 2);
+
+        const boundaryWidthPx = Math.max(1, safeNum(mr.boundary_width_px, 16));
+        let wasInBoundaryBand = false;
+
+        const computeMouseResponseInfo = (x, y) => {
+          const dx = x - apertureCx;
+          const dy = y - apertureCy;
+          const rawAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const angleFromStart = (rawAngle - startAngle + 360) % 360;
+          const seg = Math.floor((angleFromStart / 360) * segments);
+          const side = (segments === 2) ? (seg === 0 ? 'right' : 'left') : (seg < segments / 2 ? 'right' : 'left');
+          return {
+            side,
+            segment_index: Math.max(0, Math.min(segments - 1, seg)),
+            angle_deg: angleFromStart,
+            raw_angle_deg: rawAngle
+          };
         };
 
         mouseListener = (e) => {
@@ -517,8 +582,32 @@
           // Ignore if outside canvas bounds (defensive)
           if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
 
-          const side = computeMouseSide(x, y);
-          handleResponse(side, null);
+          // For hover selection, only accept when entering the boundary band around the aperture edge.
+          if (selectionMode === 'hover' || selectionMode === 'mousemove') {
+            const dxBand = x - apertureCx;
+            const dyBand = y - apertureCy;
+            const dist = Math.sqrt(dxBand * dxBand + dyBand * dyBand);
+            const inner = Math.max(0, apertureRadius - boundaryWidthPx);
+            const outer = apertureRadius + boundaryWidthPx;
+            const inBand = (dist >= inner && dist <= outer);
+
+            // Trigger on first entry into the band (works for inward and outward crossings).
+            if (!wasInBoundaryBand && !inBand) {
+              wasInBoundaryBand = false;
+              return;
+            }
+            if (wasInBoundaryBand) {
+              return;
+            }
+            if (inBand) {
+              wasInBoundaryBand = true;
+            } else {
+              return;
+            }
+          }
+
+          const info = computeMouseResponseInfo(x, y);
+          handleResponse(info.side, null, info);
         };
 
         // click = explicit click/tap; hover = continuous selection via pointer movement

@@ -1,38 +1,74 @@
 (function (jspsych) {
+  const PT = (jspsych && jspsych.ParameterType)
+    || (window.jsPsychModule && window.jsPsychModule.ParameterType)
+    || (window.jsPsych && window.jsPsych.ParameterType)
+    || {
+      BOOL: 'BOOL',
+      STRING: 'STRING',
+      INT: 'INT',
+      FLOAT: 'FLOAT',
+      OBJECT: 'OBJECT',
+      KEY: 'KEY',
+      KEYS: 'KEYS',
+      SELECT: 'SELECT',
+      HTML_STRING: 'HTML_STRING',
+      COMPLEX: 'COMPLEX',
+      FUNCTION: 'FUNCTION',
+      TIMELINE: 'TIMELINE'
+    };
+
   const info = {
     name: 'gabor',
+    version: '1.0.0',
     parameters: {
       // Task / response
-      response_task: { type: jspsych.ParameterType.STRING, default: 'discriminate_tilt' },
-      left_key: { type: jspsych.ParameterType.STRING, default: 'f' },
-      right_key: { type: jspsych.ParameterType.STRING, default: 'j' },
-      yes_key: { type: jspsych.ParameterType.STRING, default: 'f' },
-      no_key: { type: jspsych.ParameterType.STRING, default: 'j' },
+      response_task: { type: PT.STRING, default: 'discriminate_tilt' },
+      left_key: { type: PT.STRING, default: 'f' },
+      right_key: { type: PT.STRING, default: 'j' },
+      yes_key: { type: PT.STRING, default: 'f' },
+      no_key: { type: PT.STRING, default: 'j' },
 
       // Stimulus definition
-      target_location: { type: jspsych.ParameterType.STRING, default: 'left' }, // left|right|none
-      target_tilt_deg: { type: jspsych.ParameterType.FLOAT, default: 45 },
-      distractor_orientation_deg: { type: jspsych.ParameterType.FLOAT, default: 0 },
-      spatial_cue: { type: jspsych.ParameterType.STRING, default: 'none' }, // none|left|right|both
-      left_value: { type: jspsych.ParameterType.STRING, default: 'neutral' }, // neutral|high|low
-      right_value: { type: jspsych.ParameterType.STRING, default: 'neutral' }, // neutral|high|low
+      target_location: { type: PT.STRING, default: 'left' }, // left|right|none
+      target_tilt_deg: { type: PT.FLOAT, default: 45 },
+      distractor_orientation_deg: { type: PT.FLOAT, default: 0 },
+      spatial_cue: { type: PT.STRING, default: 'none' }, // none|left|right|both
+      left_value: { type: PT.STRING, default: 'neutral' }, // neutral|high|low
+      right_value: { type: PT.STRING, default: 'neutral' }, // neutral|high|low
 
       // Timings (defaults usually come from config.gabor_settings)
-      fixation_ms: { type: jspsych.ParameterType.INT, default: 1000 },
-      placeholders_ms: { type: jspsych.ParameterType.INT, default: 400 },
-      cue_ms: { type: jspsych.ParameterType.INT, default: 300 },
-      cue_delay_min_ms: { type: jspsych.ParameterType.INT, default: 100 },
-      cue_delay_max_ms: { type: jspsych.ParameterType.INT, default: 200 },
-      stimulus_duration_ms: { type: jspsych.ParameterType.INT, default: 67 },
-      mask_duration_ms: { type: jspsych.ParameterType.INT, default: 67 },
-      response_window_ms: { type: jspsych.ParameterType.INT, default: 1500 },
+      fixation_ms: { type: PT.INT, default: 1000 },
+      placeholders_ms: { type: PT.INT, default: 400 },
+      cue_ms: { type: PT.INT, default: 300 },
+      cue_delay_min_ms: { type: PT.INT, default: 100 },
+      cue_delay_max_ms: { type: PT.INT, default: 200 },
+      stimulus_duration_ms: { type: PT.INT, default: 67 },
+      mask_duration_ms: { type: PT.INT, default: 67 },
+      response_window_ms: { type: PT.INT, default: 1500 },
+
+      // Gabor grating parameters
+      spatial_frequency_cyc_per_px: { type: PT.FLOAT, default: 0.06 },
+      grating_waveform: { type: PT.STRING, default: 'sinusoidal' },
 
       // Value cue colors
-      high_value_color: { type: jspsych.ParameterType.STRING, default: '#00aa00' },
-      low_value_color: { type: jspsych.ParameterType.STRING, default: '#0066ff' },
-      neutral_value_color: { type: jspsych.ParameterType.STRING, default: '#666666' },
+      high_value_color: { type: PT.STRING, default: '#00aa00' },
+      low_value_color: { type: PT.STRING, default: '#0066ff' },
+      neutral_value_color: { type: PT.STRING, default: '#666666' },
 
-      detection_response_task_enabled: { type: jspsych.ParameterType.BOOL, default: false }
+      detection_response_task_enabled: { type: PT.BOOL, default: false }
+    },
+    data: {
+      response_key: { type: PT.STRING },
+      response_side: { type: PT.STRING },
+      correct_side: { type: PT.STRING },
+      rt_ms: { type: PT.INT },
+      accuracy: { type: PT.FLOAT },
+      correctness: { type: PT.BOOL },
+      ended_reason: { type: PT.STRING },
+      adaptive_mode: { type: PT.STRING },
+      adaptive_parameter: { type: PT.STRING },
+      adaptive_value: { type: PT.FLOAT },
+      plugin_version: { type: PT.STRING }
     }
   };
 
@@ -122,11 +158,28 @@
     ctx.restore();
   }
 
-  function makeGaborImageData(ctx, sizePx, orientationDeg, { freq = 0.06, sigmaFrac = 6, contrast = 0.95, phase = 0 } = {}) {
+  function gratingValue(phaseRad, waveform) {
+    const w = (waveform || 'sinusoidal').toString().trim().toLowerCase();
+    if (w === 'square') {
+      const s = Math.sin(phaseRad);
+      return s >= 0 ? 1 : -1;
+    }
+    if (w === 'triangle') {
+      // Triangle wave in [-1, 1]
+      return (2 / Math.PI) * Math.asin(Math.sin(phaseRad));
+    }
+    // Default: sinusoidal
+    return Math.cos(phaseRad);
+  }
+
+  function makeGaborImageData(ctx, sizePx, orientationDeg, { freq = 0.06, waveform = 'sinusoidal', sigmaFrac = 6, contrast = 0.95, phase = 0 } = {}) {
     const w = Math.max(8, Math.floor(sizePx));
     const h = w;
     const r = Math.floor(w / 2);
     const theta = (Number.isFinite(orientationDeg) ? orientationDeg : 0) * Math.PI / 180;
+
+    // Nyquist-ish clamp: cycles/px must be <= 0.5 to avoid strong aliasing.
+    const safeFreq = Math.max(0, Math.min(0.5, Number(freq) || 0));
 
     const sigma = w / sigmaFrac;
     const img = ctx.createImageData(w, h);
@@ -153,7 +206,7 @@
 
         const xRot = dx * cosT + dy * sinT;
         const envelope = Math.exp(-(rr) / twoSigma2);
-        const grating = Math.cos(2 * Math.PI * freq * xRot + phase);
+        const grating = gratingValue(2 * Math.PI * safeFreq * xRot + phase, waveform);
         const val = 127.5 + 127.5 * contrast * envelope * grating;
         const v = Math.max(0, Math.min(255, Math.round(val)));
 
@@ -167,8 +220,11 @@
     return { img, r };
   }
 
-  function drawGaborPatch(ctx, centerX, centerY, sizePx, orientationDeg) {
-    const { img, r } = makeGaborImageData(ctx, sizePx, orientationDeg);
+  function drawGaborPatch(ctx, centerX, centerY, sizePx, orientationDeg, { spatialFrequency, gratingWaveform } = {}) {
+    const { img, r } = makeGaborImageData(ctx, sizePx, orientationDeg, {
+      freq: spatialFrequency,
+      waveform: gratingWaveform
+    });
     ctx.putImageData(img, Math.round(centerX - r), Math.round(centerY - r));
 
     ctx.save();
@@ -226,6 +282,8 @@
     rightFrameColor,
     leftAngle,
     rightAngle,
+    spatialFrequency,
+    gratingWaveform,
     showCue,
     showStimulus,
     showMask
@@ -268,8 +326,8 @@
 
     // Stimulus / mask
     if (showStimulus) {
-      drawGaborPatch(ctx, leftCx, cy, patchSize, leftAngle);
-      drawGaborPatch(ctx, rightCx, cy, patchSize, rightAngle);
+      drawGaborPatch(ctx, leftCx, cy, patchSize, leftAngle, { spatialFrequency, gratingWaveform });
+      drawGaborPatch(ctx, rightCx, cy, patchSize, rightAngle, { spatialFrequency, gratingWaveform });
     } else if (showMask) {
       drawNoiseMask(ctx, leftCx, cy, patchSize);
       drawNoiseMask(ctx, rightCx, cy, patchSize);
@@ -307,6 +365,11 @@
       const spatialCue = (trial.spatial_cue ?? 'none').toString();
       const leftValue = (trial.left_value ?? 'neutral').toString();
       const rightValue = (trial.right_value ?? 'neutral').toString();
+
+      const spatialFrequency = Number.isFinite(Number(trial.spatial_frequency_cyc_per_px))
+        ? Number(trial.spatial_frequency_cyc_per_px)
+        : 0.06;
+      const gratingWaveform = (trial.grating_waveform ?? 'sinusoidal').toString();
 
       const fixationMs = Math.max(0, Number(trial.fixation_ms ?? 1000) || 0);
       const placeholdersMs = Math.max(0, Number(trial.placeholders_ms ?? 400) || 0);
@@ -440,6 +503,8 @@
           rightFrameColor,
           leftAngle,
           rightAngle,
+          spatialFrequency,
+          gratingWaveform,
           showCue: !!opts?.showCue,
           showStimulus: !!opts?.showStimulus,
           showMask: !!opts?.showMask

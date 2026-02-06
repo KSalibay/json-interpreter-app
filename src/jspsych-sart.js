@@ -1,19 +1,46 @@
 (function (jspsych) {
+  const PT = (jspsych && jspsych.ParameterType)
+    || (window.jsPsychModule && window.jsPsychModule.ParameterType)
+    || (window.jsPsych && window.jsPsych.ParameterType)
+    || {
+      BOOL: 'BOOL',
+      STRING: 'STRING',
+      INT: 'INT',
+      FLOAT: 'FLOAT',
+      OBJECT: 'OBJECT',
+      KEY: 'KEY',
+      KEYS: 'KEYS',
+      SELECT: 'SELECT',
+      HTML_STRING: 'HTML_STRING',
+      COMPLEX: 'COMPLEX',
+      FUNCTION: 'FUNCTION',
+      TIMELINE: 'TIMELINE'
+    };
+
   const info = {
     name: 'sart',
+    version: '1.0.0',
     parameters: {
-      digit: { type: jspsych.ParameterType.INT, default: 1 },
-      nogo_digit: { type: jspsych.ParameterType.INT, default: 3 },
-      go_key: { type: jspsych.ParameterType.STRING, default: 'space' },
+      digit: { type: PT.INT, default: 1 },
+      nogo_digit: { type: PT.INT, default: 3 },
+      go_key: { type: PT.STRING, default: 'space' },
 
-      stimulus_duration_ms: { type: jspsych.ParameterType.INT, default: 250 },
-      mask_duration_ms: { type: jspsych.ParameterType.INT, default: 900 },
-      trial_duration_ms: { type: jspsych.ParameterType.INT, default: 1150 },
+      stimulus_duration_ms: { type: PT.INT, default: 250 },
+      mask_duration_ms: { type: PT.INT, default: 900 },
+      trial_duration_ms: { type: PT.INT, default: 1150 },
 
-      show_fixation_dot: { type: jspsych.ParameterType.BOOL, default: false },
-      show_fixation_cross_between_trials: { type: jspsych.ParameterType.BOOL, default: false },
+      show_fixation_dot: { type: PT.BOOL, default: false },
+      show_fixation_cross_between_trials: { type: PT.BOOL, default: false },
 
-      detection_response_task_enabled: { type: jspsych.ParameterType.BOOL, default: false }
+      detection_response_task_enabled: { type: PT.BOOL, default: false }
+    },
+    data: {
+      response_key: { type: PT.STRING },
+      rt_ms: { type: PT.INT },
+      accuracy: { type: PT.FLOAT },
+      correctness: { type: PT.BOOL },
+      ended_reason: { type: PT.STRING },
+      plugin_version: { type: PT.STRING }
     }
   };
 

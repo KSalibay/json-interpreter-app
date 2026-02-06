@@ -5,6 +5,8 @@
     "ABC1234-flanker-01.json",
     "ABC1234-sart-01.json",
     "experiment_config_2026-01-07.json",
+    "sample_adaptive_gabor_quest.json",
+    "sample_adaptive_rdm_staircase.json",
     "sample_continuous.json",
     "sample_continuous_dot_groups.json",
     "sample_trial_based.json"

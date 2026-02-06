@@ -1,25 +1,54 @@
 (function (jspsych) {
+  const PT = (jspsych && jspsych.ParameterType)
+    || (window.jsPsychModule && window.jsPsychModule.ParameterType)
+    || (window.jsPsych && window.jsPsych.ParameterType)
+    || {
+      BOOL: 'BOOL',
+      STRING: 'STRING',
+      INT: 'INT',
+      FLOAT: 'FLOAT',
+      OBJECT: 'OBJECT',
+      KEY: 'KEY',
+      KEYS: 'KEYS',
+      SELECT: 'SELECT',
+      HTML_STRING: 'HTML_STRING',
+      COMPLEX: 'COMPLEX',
+      FUNCTION: 'FUNCTION',
+      TIMELINE: 'TIMELINE'
+    };
+
   const info = {
     name: 'flanker',
+    version: '1.0.0',
     parameters: {
-      stimulus_type: { type: jspsych.ParameterType.STRING, default: 'arrows' },
-      target_direction: { type: jspsych.ParameterType.STRING, default: 'left' },
-      congruency: { type: jspsych.ParameterType.STRING, default: 'congruent' },
+      stimulus_type: { type: PT.STRING, default: 'arrows' },
+      target_direction: { type: PT.STRING, default: 'left' },
+      congruency: { type: PT.STRING, default: 'congruent' },
 
-      target_stimulus: { type: jspsych.ParameterType.STRING, default: 'H' },
-      distractor_stimulus: { type: jspsych.ParameterType.STRING, default: 'S' },
-      neutral_stimulus: { type: jspsych.ParameterType.STRING, default: '–' },
+      target_stimulus: { type: PT.STRING, default: 'H' },
+      distractor_stimulus: { type: PT.STRING, default: 'S' },
+      neutral_stimulus: { type: PT.STRING, default: '–' },
 
-      left_key: { type: jspsych.ParameterType.STRING, default: 'f' },
-      right_key: { type: jspsych.ParameterType.STRING, default: 'j' },
+      left_key: { type: PT.STRING, default: 'f' },
+      right_key: { type: PT.STRING, default: 'j' },
 
-      stimulus_duration_ms: { type: jspsych.ParameterType.INT, default: 800 },
-      trial_duration_ms: { type: jspsych.ParameterType.INT, default: 1500 },
+      stimulus_duration_ms: { type: PT.INT, default: 800 },
+      trial_duration_ms: { type: PT.INT, default: 1500 },
 
-      show_fixation_dot: { type: jspsych.ParameterType.BOOL, default: false },
-      show_fixation_cross_between_trials: { type: jspsych.ParameterType.BOOL, default: false },
+      show_fixation_dot: { type: PT.BOOL, default: false },
+      show_fixation_cross_between_trials: { type: PT.BOOL, default: false },
 
-      detection_response_task_enabled: { type: jspsych.ParameterType.BOOL, default: false }
+      detection_response_task_enabled: { type: PT.BOOL, default: false }
+    },
+    data: {
+      response_key: { type: PT.STRING },
+      response_side: { type: PT.STRING },
+      correct_side: { type: PT.STRING },
+      rt_ms: { type: PT.INT },
+      accuracy: { type: PT.FLOAT },
+      correctness: { type: PT.BOOL },
+      ended_reason: { type: PT.STRING },
+      plugin_version: { type: PT.STRING }
     }
   };
 

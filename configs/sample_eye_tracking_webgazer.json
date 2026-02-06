@@ -1,0 +1,77 @@
+{
+  "task_type": "rdm",
+  "experiment_type": "trial-based",
+
+  "data_collection": {
+    "eye_tracking": {
+      "enabled": true,
+      "sample_interval_ms": 33,
+      "show_video": false,
+      "webgazer_srcs": [
+        "vendor/webgazer.min.js",
+        "https://unpkg.com/webgazer@2.1.0/dist/webgazer.js"
+      ]
+    }
+  },
+
+  "display_parameters": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#404040"
+  },
+  "aperture_parameters": {
+    "shape": "circle",
+    "diameter": 350,
+    "center_x": 300,
+    "center_y": 300,
+    "show_aperture_outline": false
+  },
+  "dot_parameters": {
+    "total_dots": 150,
+    "dot_size": 4,
+    "dot_color": "#FFFFFF",
+    "lifetime_frames": 5
+  },
+  "motion_parameters": {
+    "coherence": 0.5,
+    "direction": 0,
+    "speed": 6,
+    "noise_type": "random_direction"
+  },
+  "timing_parameters": {
+    "fixation_duration": 300,
+    "stimulus_duration": 800,
+    "response_deadline": 2000,
+    "inter_trial_interval": 500
+  },
+  "response_parameters": {
+    "response_device": "keyboard",
+    "choices": ["f", "j"],
+    "require_response": true
+  },
+
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "<div style=\"max-width: 820px; margin:0 auto; text-align:left;\">\n<h3>WebGazer demo (eye tracking)</h3>\n<p>This config enables <strong>camera-based eye tracking</strong> via WebGazer.</p>\n<ul>\n<li>When prompted, allow camera access.</li>\n<li>At the end of the run, a final jsPsych data row is added with <code>plugin_type=eye-tracking</code> and a JSON string of gaze samples.</li>\n</ul>\n<p>Press any key to begin.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "rdm-trial",
+      "trial_duration": 1200,
+      "coherence": 0.6,
+      "direction": 0
+    },
+    {
+      "type": "rdm-trial",
+      "trial_duration": 1200,
+      "coherence": 0.4,
+      "direction": 180
+    },
+    {
+      "type": "instructions",
+      "stimulus": "<div style=\"max-width: 820px; margin:0 auto; text-align:left;\">\n<p>End of demo.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    }
+  ]
+}

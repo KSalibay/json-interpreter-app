@@ -1,14 +1,52 @@
 var jsPsychRdm = (function (jspsych) {
-  const info = {
-    name: 'rdm',
-    parameters: {
-      rdm: { type: jspsych.ParameterType.OBJECT, default: {} },
-      response: { type: jspsych.ParameterType.OBJECT, default: {} },
-      timing: { type: jspsych.ParameterType.OBJECT, default: {} },
-      transition: { type: jspsych.ParameterType.OBJECT, default: { duration_ms: 0, type: 'none' } },
-      dataCollection: { type: jspsych.ParameterType.OBJECT, default: {} }
-    }
-  };
+  try {
+    const PT = (jspsych && jspsych.ParameterType)
+      || (window.jsPsychModule && window.jsPsychModule.ParameterType)
+      || (window.jsPsych && window.jsPsych.ParameterType)
+      || {
+        BOOL: 'BOOL',
+        STRING: 'STRING',
+        INT: 'INT',
+        FLOAT: 'FLOAT',
+        OBJECT: 'OBJECT',
+        KEY: 'KEY',
+        KEYS: 'KEYS',
+        SELECT: 'SELECT',
+        HTML_STRING: 'HTML_STRING',
+        COMPLEX: 'COMPLEX',
+        FUNCTION: 'FUNCTION',
+        TIMELINE: 'TIMELINE'
+      };
+
+    const info = {
+      name: 'rdm',
+      version: '1.0.0',
+      parameters: {
+        rdm: { type: PT.OBJECT, default: {} },
+        response: { type: PT.OBJECT, default: {} },
+        timing: { type: PT.OBJECT, default: {} },
+        transition: { type: PT.OBJECT, default: { duration_ms: 0, type: 'none' } },
+        dataCollection: { type: PT.OBJECT, default: {} }
+      },
+      data: {
+        response_side: { type: PT.STRING },
+        response_key: { type: PT.STRING },
+        response_angle_deg: { type: PT.FLOAT },
+        response_angle_raw_deg: { type: PT.FLOAT },
+        response_segment_index: { type: PT.INT },
+        correct_side: { type: PT.STRING },
+        rt_ms: { type: PT.INT },
+        accuracy: { type: PT.FLOAT },
+        correctness: { type: PT.BOOL },
+        ended_reason: { type: PT.STRING },
+        rdm: { type: PT.OBJECT },
+        response: { type: PT.OBJECT },
+        adaptive_mode: { type: PT.STRING },
+        adaptive_parameter: { type: PT.STRING },
+        adaptive_value: { type: PT.FLOAT },
+        plugin_version: { type: PT.STRING }
+      }
+    };
 
   function nowMs() {
     return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -59,6 +97,25 @@ var jsPsychRdm = (function (jspsych) {
 
     // Generic: treat segments in [0..segments/2) as right-ish
     return seg < segments / 2 ? 'right' : 'left';
+  }
+
+  function computeMouseResponseInfo(x, y, cx, cy, startAngleDeg, segments) {
+    const dx = x - cx;
+    const dy = y - cy;
+    const rawAngle = (Math.atan2(dy, dx) * 180) / Math.PI; // -180..180, 0=right
+    const angleFromStart = (rawAngle - startAngleDeg + 360) % 360; // 0..360
+    const seg = Math.floor((angleFromStart / 360) * segments);
+
+    const side = (segments === 2)
+      ? (seg === 0 ? 'right' : 'left')
+      : (seg < segments / 2 ? 'right' : 'left');
+
+    return {
+      side,
+      segment_index: Math.max(0, Math.min(segments - 1, seg)),
+      angle_deg: angleFromStart,
+      raw_angle_deg: rawAngle
+    };
   }
 
   class JsPsychRdmPlugin {
@@ -129,6 +186,10 @@ var jsPsychRdm = (function (jspsych) {
       let responseTs = null;
       let startTs = null;
 
+      let responseAngleDeg = null;
+      let responseAngleRawDeg = null;
+      let responseSegmentIndex = null;
+
       const correctSide = window.RDMEngine.computeCorrectSide(rdm);
 
       // Detection Response Task (DRT) overlay (builder flag: detection_response_task_enabled)
@@ -165,6 +226,9 @@ var jsPsychRdm = (function (jspsych) {
           correct_side: correctSide,
           response_side: responseSide,
           response_key: responseKey,
+          response_angle_deg: responseAngleDeg,
+          response_angle_raw_deg: responseAngleRawDeg,
+          response_segment_index: responseSegmentIndex,
           end_reason: reason || null,
           ...(includeRt ? { rt_ms: rt } : {}),
           ...(includeAccuracy ? { accuracy: isCorrect } : {}),
@@ -245,6 +309,9 @@ var jsPsychRdm = (function (jspsych) {
 
         responseKey = payload.key || null;
         responseSide = payload.side || null;
+        if (payload && Number.isFinite(payload.angle_deg)) responseAngleDeg = payload.angle_deg;
+        if (payload && Number.isFinite(payload.raw_angle_deg)) responseAngleRawDeg = payload.raw_angle_deg;
+        if (payload && Number.isFinite(payload.segment_index)) responseSegmentIndex = payload.segment_index;
         responseTs = nowMs();
         rt = startTs ? Math.round(responseTs - startTs) : null;
 
@@ -331,10 +398,39 @@ var jsPsychRdm = (function (jspsych) {
           });
         } else if (responseDevice === 'mouse' || responseDevice === 'touch') {
           const mr = response.mouse_response || {};
-          const segments = Number(mr.segments ?? 2);
+          const segments = Math.max(2, Number(mr.segments ?? 2));
           const startAngle = Number(mr.start_angle_deg ?? 0);
           const selectionModeRaw = (mr.selection_mode ?? mr.mode ?? 'click');
           const selectionMode = (typeof selectionModeRaw === 'string' ? selectionModeRaw.trim().toLowerCase() : 'click');
+
+          // Hover semantics: capture the first time the pointer reaches the *aperture edge*.
+          // This matches typical instructions (“move to the side of the circle”) and prevents
+          // accidental early capture when the cursor moves near the center.
+          const apertureCx = Number(
+            rdm.aperture_center_x ??
+            rdm.center_x ??
+            (rdm.aperture_parameters && rdm.aperture_parameters.center_x) ??
+            (canvas.width / 2)
+          );
+          const apertureCy = Number(
+            rdm.aperture_center_y ??
+            rdm.center_y ??
+            (rdm.aperture_parameters && rdm.aperture_parameters.center_y) ??
+            (canvas.height / 2)
+          );
+          const apertureDiameter = Number(
+            rdm.aperture_diameter ??
+            rdm.apertureDiameter ??
+            (rdm.aperture_parameters && rdm.aperture_parameters.diameter) ??
+            (rdm.aperture_parameters && rdm.aperture_parameters.diameter_px) ??
+            NaN
+          );
+          const apertureRadius = Number.isFinite(apertureDiameter)
+            ? (apertureDiameter / 2)
+            : (Math.min(canvas.width, canvas.height) / 2);
+
+          const boundaryWidthPx = Math.max(1, Number(mr.boundary_width_px ?? 16));
+          let wasInBoundaryBand = false;
 
           mouseListener = (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -343,8 +439,43 @@ var jsPsychRdm = (function (jspsych) {
             if (clientX === null || clientY === null) return;
             const x = clientX - rect.left;
             const y = clientY - rect.top;
-            const side = computeMouseSide(x, y, canvas.width / 2, canvas.height / 2, startAngle, segments);
-            onResponse({ key: null, side });
+
+            // Ignore if outside canvas bounds (defensive)
+            if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+
+            // For hover selection, only accept when entering the boundary band around the aperture edge.
+            if (selectionMode === 'hover' || selectionMode === 'mousemove') {
+              const dxBand = x - apertureCx;
+              const dyBand = y - apertureCy;
+              const dist = Math.sqrt(dxBand * dxBand + dyBand * dyBand);
+              const inner = Math.max(0, apertureRadius - boundaryWidthPx);
+              const outer = apertureRadius + boundaryWidthPx;
+              const inBand = (dist >= inner && dist <= outer);
+
+              // Trigger on first entry into the band (works for inward and outward crossings).
+              if (!wasInBoundaryBand && !inBand) {
+                wasInBoundaryBand = false;
+                return;
+              }
+              if (wasInBoundaryBand) {
+                // Already in band; do not keep re-triggering.
+                return;
+              }
+              if (inBand) {
+                wasInBoundaryBand = true;
+              } else {
+                return;
+              }
+            }
+
+            const info = computeMouseResponseInfo(x, y, apertureCx, apertureCy, startAngle, segments);
+            onResponse({
+              key: null,
+              side: info.side,
+              angle_deg: info.angle_deg,
+              raw_angle_deg: info.raw_angle_deg,
+              segment_index: info.segment_index
+            });
           };
 
           mouseListenerEvent = (selectionMode === 'hover' || selectionMode === 'mousemove') ? 'mousemove' : 'click';
@@ -432,7 +563,12 @@ var jsPsychRdm = (function (jspsych) {
     }
   }
 
-  JsPsychRdmPlugin.info = info;
-  window.jsPsychRdm = JsPsychRdmPlugin;
+    JsPsychRdmPlugin.info = info;
+    window.jsPsychRdm = JsPsychRdmPlugin;
+    return JsPsychRdmPlugin;
+  } catch (e) {
+    console.error('[jspsych-rdm] Failed to initialize plugin:', e);
+    return null;
+  }
 })(window.jsPsychModule || window.jsPsych);
 

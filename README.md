@@ -36,6 +36,16 @@ Debugging (local):
 - Add `&debug=1` to auto-download the jsPsych data CSV on finish.
   - Example: `.../index.html?id=ABC1234&debug=1`
 - Optional: `&debug=json` to download JSON instead.
+  - If eye tracking is enabled, debug mode also downloads a second gaze-only JSON file: `psychjson-eye-tracking-...json`.
+  - Debug mode also shows an on-screen eye-tracking HUD (when eye tracking is enabled) to confirm that samples are accumulating.
+
+Validation (local):
+- Add `&validate=1` to run a quick console self-check of adaptive blocks (QUEST/staircase) and Gabor parameter propagation.
+  - This compiles a separate timeline for validation so it does not affect the real run.
+- Use `&validate=only` to run validation without starting the experiment.
+- Example sample configs included (single-task to match Builder validators):
+  - Gabor QUEST: `.../index.html?id=sample_adaptive_gabor_quest&validate=1&debug=1`
+  - RDM staircase: `.../index.html?id=sample_adaptive_rdm_staircase&validate=1&debug=1`
 
 If Live Server doesn't expose a directory listing, generate/update the manifest:
 - PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/generate-manifest.ps1`
@@ -46,10 +56,55 @@ When hosted inside JATOS, the page will detect `window.jatos` and will:
 - submit jsPsych data via `jatos.submitResultData(...)`
 - then end the study via `jatos.endStudyAjax(true)`
 
+## Eye tracking (WebGazer)
+
+The interpreter can optionally collect camera-based gaze estimates via WebGazer.
+
+- Enable in config: `data_collection.eye_tracking.enabled = true` (also supports legacy `data_collection["eye-tracking"] = true`).
+- Note: camera access typically requires HTTPS (or `localhost`) so the browser can prompt for permission.
+- Flow:
+  - Permission/start screen is injected so the camera prompt is tied to a user gesture.
+  - Calibration/training is injected by default (WebGazer often returns null predictions until trained).
+  - If the Builder timeline includes a **Calibration Instructions** preface screen (tagged with `data.plugin_type = "eye-tracking-calibration-instructions"`), it is automatically moved to appear between the permission screen and the calibration dots.
+- Output:
+  - On finish, an eye-tracking payload is attached to the jsPsych data.
+  - If the jsPsych runtime does not allow mutating the data store safely, the interpreter falls back to appending a final extra row at export/submission time.
+  - The eye-tracking payload row uses `plugin_type = "eye-tracking"` and includes:
+    - `eye_tracking_samples_json` (stringified array of gaze samples)
+    - `eye_tracking_calibration_json` (stringified array of calibration events)
+    - `eye_tracking_stats`, start/stop results, and sample counts
+- Reliability: recommended to vendor a pinned copy at `vendor/webgazer.min.js` so studies don’t depend on external CDNs.
+  - The interpreter will try `vendor/webgazer.min.js` first, then fall back to a pinned CDN.
+  - Override sources via `data_collection.eye_tracking.webgazer_srcs` (string array) or `webgazer_src` (single string).
+- If you later want CDN-only (e.g., for a packaged distribution), set `webgazer_srcs` to just the CDN URL (or remove `vendor/webgazer.min.js`).
+- Licensing: WebGazer is GPL-3.0; see `vendor/THIRD_PARTY_NOTICES.md` before distributing builds.
+- Sample: `configs/sample_eye_tracking_webgazer.json`
+
+### Eye tracking config knobs
+
+Under `data_collection.eye_tracking` (object form), supported settings include:
+
+- `enabled` (boolean)
+- Sampling:
+  - `sample_interval_ms` (preferred; milliseconds between stored samples)
+  - `sample_rate` (Hz; used only if `sample_interval_ms` is not provided)
+- Sources:
+  - `webgazer_srcs` (string array) or `webgazer_src` (string)
+- UI:
+  - `show_video` (boolean) — show/hide webcam preview box
+- Calibration:
+  - `calibration_enabled` (boolean; default true)
+  - `calibration_points` (number; default 9)
+  - `calibration_key` (string; default space)
+- Permission prompting:
+  - `force_permission_request` (boolean; default true)
+  - `cam_constraints` (object; passed to `getUserMedia` when forcing the prompt)
+
 ## Current scope / assumptions
 
 - Supports both `experiment_type: "trial-based"` and `"continuous"`.
 - `block` components are expanded up-front and sampled **per-trial**.
+- Adaptive/staircase blocks (e.g. QUEST) choose their next value at runtime (via `on_start`) and update after each trial (via `on_finish`).
 - Expected total scale is ~≤ 5k trials/frames.
 
 ## Files

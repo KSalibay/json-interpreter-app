@@ -1,0 +1,95 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "gabor",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "detection_response_task_enabled": false,
+      "stimulus": "This is an experiment which consists of the Random Dot Motion task. Please respond to the stimuli by pressing keys Left Arrow and Right Arrow. Press any key to continue.",
+      "choices": "ALL_KEYS",
+      "prompt": "",
+      "response_ends_trial": true
+    },
+    {
+      "type": "block",
+      "detection_response_task_enabled": false,
+      "component_type": "gabor-trial",
+      "length": 10,
+      "sampling_mode": "per-trial",
+      "parameter_windows": {
+        "stimulus_duration_ms": {
+          "min": 67,
+          "max": 67
+        },
+        "mask_duration_ms": {
+          "min": 67,
+          "max": 67
+        }
+      },
+      "parameter_values": {
+        "response_task": "discriminate_tilt",
+        "left_key": "f",
+        "right_key": "j",
+        "yes_key": "f",
+        "no_key": "j",
+        "target_location": [
+          "left",
+          "right"
+        ],
+        "target_tilt_deg": [
+          -45,
+          45
+        ],
+        "distractor_orientation_deg": [
+          0,
+          90
+        ],
+        "spatial_cue": [
+          "none",
+          "left",
+          "right",
+          "both"
+        ],
+        "left_value": [
+          "neutral",
+          "high",
+          "low"
+        ],
+        "right_value": [
+          "neutral",
+          "high",
+          "low"
+        ]
+      }
+    }
+  ],
+  "frame_rate": 60,
+  "duration": 30,
+  "update_interval": 1000,
+  "num_trials": 20,
+  "default_iti": 1000,
+  "randomize_order": true,
+  "gabor_settings": {
+    "response_task": "discriminate_tilt",
+    "left_key": "f",
+    "right_key": "j",
+    "yes_key": "f",
+    "no_key": "j",
+    "high_value_color": "#00aa00",
+    "low_value_color": "#0066ff",
+    "spatial_cue_validity": 0.8,
+    "fixation_ms": 1000,
+    "placeholders_ms": 400,
+    "cue_ms": 300,
+    "cue_delay_min_ms": 100,
+    "cue_delay_max_ms": 200,
+    "stimulus_duration_ms": 67,
+    "mask_duration_ms": 67
+  }
+}

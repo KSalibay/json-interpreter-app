@@ -1,14 +1,39 @@
 (function (jspsych) {
+  const PT = (jspsych && jspsych.ParameterType)
+    || (window.jsPsychModule && window.jsPsychModule.ParameterType)
+    || (window.jsPsych && window.jsPsych.ParameterType)
+    || {
+      BOOL: 'BOOL',
+      STRING: 'STRING',
+      INT: 'INT',
+      FLOAT: 'FLOAT',
+      OBJECT: 'OBJECT',
+      KEY: 'KEY',
+      KEYS: 'KEYS',
+      SELECT: 'SELECT',
+      HTML_STRING: 'HTML_STRING',
+      COMPLEX: 'COMPLEX',
+      FUNCTION: 'FUNCTION',
+      TIMELINE: 'TIMELINE'
+    };
+
   const info = {
     name: 'survey-response',
+    version: '1.0.0',
     parameters: {
-      title: { type: jspsych.ParameterType.STRING, default: 'Survey' },
-      instructions: { type: jspsych.ParameterType.STRING, default: '' },
-      submit_label: { type: jspsych.ParameterType.STRING, default: 'Continue' },
-      allow_empty_on_timeout: { type: jspsych.ParameterType.BOOL, default: false },
-      timeout_ms: { type: jspsych.ParameterType.INT, default: null },
-      questions: { type: jspsych.ParameterType.OBJECT, array: true, default: [] },
-      detection_response_task_enabled: { type: jspsych.ParameterType.BOOL, default: false }
+      title: { type: PT.STRING, default: 'Survey' },
+      instructions: { type: PT.STRING, default: '' },
+      submit_label: { type: PT.STRING, default: 'Continue' },
+      allow_empty_on_timeout: { type: PT.BOOL, default: false },
+      timeout_ms: { type: PT.INT, default: null },
+      questions: { type: PT.OBJECT, array: true, default: [] },
+      detection_response_task_enabled: { type: PT.BOOL, default: false }
+    },
+    data: {
+      responses: { type: PT.OBJECT },
+      rt_ms: { type: PT.INT },
+      ended_reason: { type: PT.STRING },
+      plugin_version: { type: PT.STRING }
     }
   };
 

@@ -3,6 +3,155 @@
     return !!x && typeof x === 'object' && !Array.isArray(x);
   }
 
+  function clamp(x, lo, hi) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return lo;
+    return Math.max(lo, Math.min(hi, n));
+  }
+
+  function logit(p) {
+    const pp = clamp(p, 1e-6, 1 - 1e-6);
+    return Math.log(pp / (1 - pp));
+  }
+
+  function normalPdf(x, mu, sigma) {
+    const s = Number(sigma);
+    if (!Number.isFinite(s) || s <= 0) return 0;
+    const z = (Number(x) - Number(mu)) / s;
+    return Math.exp(-0.5 * z * z) / (s * Math.sqrt(2 * Math.PI));
+  }
+
+  class QuestStaircase {
+    constructor(cfg) {
+      const c = isObject(cfg) ? cfg : {};
+
+      this.parameter = (c.parameter || 'coherence').toString();
+      this.target = Number.isFinite(Number(c.target_performance)) ? Number(c.target_performance) : 0.82;
+      this.beta = Number.isFinite(Number(c.beta)) ? Number(c.beta) : 3.5;
+      this.delta = Number.isFinite(Number(c.delta)) ? Number(c.delta) : 0.01;
+      this.gamma = Number.isFinite(Number(c.gamma)) ? Number(c.gamma) : 0.5;
+      this.minValue = Number.isFinite(Number(c.min_value)) ? Number(c.min_value) : -Infinity;
+      this.maxValue = Number.isFinite(Number(c.max_value)) ? Number(c.max_value) : Infinity;
+
+      const startValue = Number.isFinite(Number(c.start_value)) ? Number(c.start_value) : 0;
+      const startSd = Number.isFinite(Number(c.start_sd)) ? Math.max(1e-6, Number(c.start_sd)) : 0.2;
+
+      // Discrete posterior over threshold T.
+      const span = 5 * startSd;
+      const lo = clamp(startValue - span, this.minValue, this.maxValue);
+      const hi = clamp(startValue + span, this.minValue, this.maxValue);
+      const steps = 200;
+      const grid = [];
+      const post = [];
+      for (let i = 0; i < steps; i++) {
+        const t = (steps === 1) ? lo : (lo + (hi - lo) * (i / (steps - 1)));
+        grid.push(t);
+        post.push(normalPdf(t, startValue, startSd));
+      }
+
+      this.grid = grid;
+      this.posterior = post;
+      this._normalize();
+
+      // Offset from threshold to target performance for our logistic psychometric.
+      // p = gamma + (1-gamma-delta) * sigmoid(beta*(x - T))
+      const denom = (1 - this.gamma - this.delta);
+      const scaled = denom > 1e-6 ? (this.target - this.gamma) / denom : 0.5;
+      const safeScaled = clamp(scaled, 1e-6, 1 - 1e-6);
+      this.offset = logit(safeScaled) / (Number.isFinite(this.beta) && this.beta !== 0 ? this.beta : 1);
+
+      this.lastX = null;
+      this.trialIndex = 0;
+    }
+
+    _normalize() {
+      const s = this.posterior.reduce((a, b) => a + b, 0);
+      if (!(s > 0)) {
+        const n = this.posterior.length || 1;
+        for (let i = 0; i < this.posterior.length; i++) this.posterior[i] = 1 / n;
+        return;
+      }
+      for (let i = 0; i < this.posterior.length; i++) this.posterior[i] /= s;
+    }
+
+    meanThreshold() {
+      let m = 0;
+      for (let i = 0; i < this.grid.length; i++) {
+        m += this.grid[i] * this.posterior[i];
+      }
+      return m;
+    }
+
+    next() {
+      const tMean = this.meanThreshold();
+      const x = clamp(tMean + this.offset, this.minValue, this.maxValue);
+      this.lastX = x;
+      this.trialIndex++;
+      return x;
+    }
+
+    psychometric(x, threshold) {
+      const beta = Number.isFinite(this.beta) ? this.beta : 1;
+      const z = beta * (Number(x) - Number(threshold));
+      const sig = 1 / (1 + Math.exp(-z));
+      const p = this.gamma + (1 - this.gamma - this.delta) * sig;
+      return clamp(p, 1e-6, 1 - 1e-6);
+    }
+
+    update(isCorrect) {
+      if (!Number.isFinite(this.lastX)) return;
+      const r = isCorrect === true ? 1 : 0;
+      const x = this.lastX;
+
+      for (let i = 0; i < this.grid.length; i++) {
+        const t = this.grid[i];
+        const p = this.psychometric(x, t);
+        const like = r ? p : (1 - p);
+        this.posterior[i] *= like;
+      }
+      this._normalize();
+    }
+  }
+
+  class WeightedUpDownStaircase {
+    constructor(cfg) {
+      const c = isObject(cfg) ? cfg : {};
+      this.parameter = (c.parameter || 'coherence').toString();
+      this.mode = (c.mode || 'simple').toString();
+      this.target = Number.isFinite(Number(c.target_performance)) ? Number(c.target_performance) : 0.82;
+      this.step = Number.isFinite(Number(c.step_size)) ? Math.abs(Number(c.step_size)) : 0.05;
+      this.minValue = Number.isFinite(Number(c.min_value)) ? Number(c.min_value) : -Infinity;
+      this.maxValue = Number.isFinite(Number(c.max_value)) ? Number(c.max_value) : Infinity;
+      this.value = Number.isFinite(Number(c.start_value)) ? Number(c.start_value) : 0;
+      this.lastX = null;
+      this.trialIndex = 0;
+    }
+
+    next() {
+      const x = clamp(this.value, this.minValue, this.maxValue);
+      this.lastX = x;
+      this.trialIndex++;
+      return x;
+    }
+
+    update(isCorrect) {
+      const correct = isCorrect === true;
+      if (this.mode === 'staircase') {
+        // Weighted step-down to converge near target performance:
+        // E[Δ] = p*(-k*step) + (1-p)*(+step) = 0 => k = (1-p)/p
+        const p = clamp(this.target, 1e-3, 1 - 1e-3);
+        const k = (1 - p) / p;
+        if (correct) this.value -= this.step * k;
+        else this.value += this.step;
+      } else {
+        // simple: symmetric 1-up-1-down
+        if (correct) this.value -= this.step;
+        else this.value += this.step;
+      }
+      this.value = clamp(this.value, this.minValue, this.maxValue);
+    }
+  }
+
   function deepMerge(base, override) {
     const out = isObject(base) ? { ...base } : {};
     if (!isObject(override)) return out;
@@ -28,8 +177,9 @@
     const length = Math.max(1, Number.parseInt(block.length ?? 1, 10) || 1);
     const baseType = (typeof block.component_type === 'string' && block.component_type.trim()) ? block.component_type : 'rdm-trial';
 
-    const windows = isObject(block.parameter_windows) ? block.parameter_windows : {};
-    const values = isObject(block.parameter_values) ? block.parameter_values : {};
+    // Clone so we can safely delete block-level-only fields
+    const windows = isObject(block.parameter_windows) ? { ...block.parameter_windows } : {};
+    const values = isObject(block.parameter_values) ? { ...block.parameter_values } : {};
 
     const seed = Number.isFinite(block.seed) ? (block.seed >>> 0) : null;
     const rng = seed === null ? Math.random : mulberry32(seed);
@@ -52,6 +202,72 @@
       return v;
     };
 
+    // Adaptive / staircase support (trial-based). In continuous mode this isn't supported yet.
+    let staircase = null;
+    let adaptiveMeta = null;
+
+    // Gabor QUEST blocks export values.adaptive = { mode:'quest', parameter: ... }
+    if (baseType === 'gabor-trial' && isObject(values.adaptive) && (values.adaptive.mode || '').toString() === 'quest') {
+      const a = values.adaptive;
+      adaptiveMeta = {
+        mode: 'quest',
+        parameter: (a.parameter || 'target_tilt_deg').toString()
+      };
+
+      // If min/max not provided, try to infer from block windows.
+      const inferredMin = (adaptiveMeta.parameter in windows && isObject(windows[adaptiveMeta.parameter])) ? Number(windows[adaptiveMeta.parameter].min) : undefined;
+      const inferredMax = (adaptiveMeta.parameter in windows && isObject(windows[adaptiveMeta.parameter])) ? Number(windows[adaptiveMeta.parameter].max) : undefined;
+
+      staircase = new QuestStaircase({
+        ...a,
+        parameter: adaptiveMeta.parameter,
+        ...(Number.isFinite(inferredMin) && a.min_value === undefined ? { min_value: inferredMin } : {}),
+        ...(Number.isFinite(inferredMax) && a.max_value === undefined ? { max_value: inferredMax } : {})
+      });
+    }
+
+    // RDM adaptive blocks (builder exports: windows.initial_coherence, windows.step_size, values.algorithm)
+    if (baseType === 'rdm-adaptive') {
+      const algo = (values.algorithm || 'quest').toString();
+      const target = Number.isFinite(Number(values.target_performance)) ? Number(values.target_performance) : 0.82;
+
+      const initW = isObject(windows.initial_coherence) ? windows.initial_coherence : {};
+      const stepW = isObject(windows.step_size) ? windows.step_size : {};
+      const startValue = sampleNumber(initW.min, initW.max);
+      const stepSize = sampleNumber(stepW.min, stepW.max);
+
+      delete windows.initial_coherence;
+      delete windows.step_size;
+
+      adaptiveMeta = { mode: algo, parameter: 'coherence' };
+
+      if (algo === 'quest') {
+        staircase = new QuestStaircase({
+          parameter: 'coherence',
+          target_performance: target,
+          start_value: Number.isFinite(startValue) ? startValue : 0.1,
+          start_sd: Number.isFinite(stepSize) ? Math.max(0.02, stepSize) : 0.08,
+          // Coherence is bounded.
+          min_value: 0,
+          max_value: 1,
+          // For 2AFC-like left/right decisions.
+          gamma: 0.5,
+          delta: 0.01,
+          beta: 5
+        });
+      } else {
+        staircase = new WeightedUpDownStaircase({
+          mode: algo,
+          parameter: 'coherence',
+          target_performance: target,
+          start_value: Number.isFinite(startValue) ? startValue : 0.1,
+          step_size: Number.isFinite(stepSize) ? stepSize : 0.05,
+          min_value: 0,
+          max_value: 1
+        });
+      }
+    }
+
     const trials = [];
     for (let i = 0; i < length; i++) {
       const t = { type: baseType, _generated_from_block: true, _block_index: i };
@@ -67,6 +283,68 @@
         const s = sampleNumber(w.min, w.max);
         if (s === null) continue;
         t[k] = s;
+      }
+
+      // Adaptive override for the selected parameter.
+      if (staircase && adaptiveMeta && typeof adaptiveMeta.parameter === 'string') {
+        const p = adaptiveMeta.parameter;
+
+        // NOTE: adaptive values must be chosen at runtime (on_start) so updates from
+        // previous trials can influence the next trial. Precomputing values here would
+        // freeze the staircase.
+        let realizedAdaptiveValue = null;
+
+        // Attach hooks (compiler will carry these into jsPsych trials).
+        t.on_start = (trial) => {
+          // If the parameter was already set by values/windows, adaptive should win.
+          // For target_tilt_deg, QUEST adapts magnitude but we randomize sign for discriminate_tilt.
+          let val;
+          if (p === 'target_tilt_deg') {
+            const mag = Math.abs(Number(staircase.next()));
+            const sign = rng() < 0.5 ? -1 : 1;
+            val = sign * mag;
+          } else {
+            val = staircase.next();
+          }
+
+          realizedAdaptiveValue = val;
+
+          // Keep it on the expanded item too (useful for debugging / introspection).
+          t[p] = val;
+
+          if (isObject(trial.rdm)) {
+            trial.rdm[p] = val;
+          } else {
+            trial[p] = val;
+          }
+
+          trial.data = isObject(trial.data) ? trial.data : {};
+          trial.data.adaptive_mode = adaptiveMeta.mode;
+          trial.data.adaptive_parameter = p;
+          trial.data.adaptive_value = val;
+        };
+
+        t.on_finish = (data) => {
+          // Determine correctness from plugin outputs.
+          let isCorrect = false;
+
+          if (data && typeof data.correctness === 'boolean') {
+            isCorrect = data.correctness;
+          } else if (data && typeof data.correct === 'boolean') {
+            isCorrect = data.correct;
+          } else if (data && data.response_side !== undefined && data.correct_side !== undefined) {
+            isCorrect = (data.response_side !== null && data.response_side === data.correct_side);
+          }
+
+          staircase.update(isCorrect);
+
+          // Keep the realized adaptive value on the data for analysis.
+          if (data && typeof data === 'object') {
+            data.adaptive_mode = adaptiveMeta.mode;
+            data.adaptive_parameter = p;
+            data.adaptive_value = realizedAdaptiveValue;
+          }
+        };
       }
 
       // dot-groups helper: group_2_percentage = 100 - group_1_percentage
@@ -118,6 +396,28 @@
   function compileToJsPsychTimeline(config) {
     if (!isObject(config)) throw new Error('Config must be an object');
 
+    function resolvePlugin(p) {
+      if (typeof p === 'function') return p;
+      if (p && typeof p === 'object' && typeof p.default === 'function') return p.default;
+      return null;
+    }
+
+    function requirePlugin(name, maybePlugin) {
+      const resolved = resolvePlugin(maybePlugin);
+      if (!resolved) {
+        throw new Error(`Missing required plugin: ${name}`);
+      }
+      return resolved;
+    }
+
+    // html-keyboard-response comes from an external jsPsych plugin package.
+    // Depending on bundling, it may be a function or an object with a `default` export.
+    const HtmlKeyboardResponsePlugin = resolvePlugin(
+      (typeof jsPsychHtmlKeyboardResponse !== 'undefined') ? jsPsychHtmlKeyboardResponse : null
+    ) || resolvePlugin(window.jsPsychHtmlKeyboardResponse);
+
+    const HtmlKeyboard = requirePlugin('html-keyboard-response (jsPsychHtmlKeyboardResponse)', HtmlKeyboardResponsePlugin);
+
     const experimentType = config.experiment_type || 'trial-based';
     const taskType = config.task_type || 'rdm';
 
@@ -162,9 +462,13 @@
         if (type === 'html-keyboard-response' || type === 'instructions') {
           // Keep instructions as their own trial.
           timeline.push({
-            type: jsPsychHtmlKeyboardResponse,
+            type: HtmlKeyboard,
             stimulus: item.stimulus || '',
+            prompt: (item.prompt === undefined ? null : item.prompt),
             choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
+            stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
+            trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),
+            response_ends_trial: (item.response_ends_trial === undefined ? true : item.response_ends_trial),
             data: { plugin_type: type }
           });
           continue;
@@ -237,17 +541,22 @@
 
         if (type === 'html-keyboard-response' || type === 'instructions') {
         timeline.push({
-          type: jsPsychHtmlKeyboardResponse,
+          type: HtmlKeyboard,
           stimulus: item.stimulus || '',
+          prompt: (item.prompt === undefined ? null : item.prompt),
           choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
+          stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
+          trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),
+          response_ends_trial: (item.response_ends_trial === undefined ? true : item.response_ends_trial),
           data: { plugin_type: type }
         });
         continue;
       }
 
       if (type === 'survey-response') {
+        const SurveyResponse = requirePlugin('survey-response (window.jsPsychSurveyResponse)', window.jsPsychSurveyResponse);
         timeline.push({
-          type: window.jsPsychSurveyResponse,
+          type: SurveyResponse,
           title: item.title || 'Survey',
           instructions: item.instructions || '',
           submit_label: item.submit_label || 'Continue',
@@ -261,10 +570,16 @@
       }
 
       if (typeof type === 'string' && type.startsWith('rdm-')) {
+        const Rdm = requirePlugin('rdm (window.jsPsychRdm)', window.jsPsychRdm);
+        const onStart = typeof item.on_start === 'function' ? item.on_start : null;
+        const onFinish = typeof item.on_finish === 'function' ? item.on_finish : null;
+
         const itemCopy = { ...item };
         delete itemCopy.response_parameters_override;
         delete itemCopy.transition_duration;
         delete itemCopy.transition_type;
+        delete itemCopy.on_start;
+        delete itemCopy.on_finish;
 
         const responseOverride = isObject(item.response_parameters_override) ? item.response_parameters_override : null;
         const response = responseOverride ? deepMerge(responseDefaults, responseOverride) : { ...responseDefaults };
@@ -285,13 +600,15 @@
         }), response);
 
         timeline.push({
-          type: window.jsPsychRdm,
+          type: Rdm,
           rdm,
           response,
           timing,
           transition,
           dataCollection,
           ...(experimentType === 'trial-based' && baseIti > 0 ? { post_trial_gap: baseIti } : {}),
+          ...(onStart ? { on_start: onStart } : {}),
+          ...(onFinish ? { on_finish: onFinish } : {}),
           data: {
             plugin_type: type,
             _generated_from_block: !!item._generated_from_block,
@@ -303,9 +620,10 @@
 
       // Flanker task
       if (type === 'flanker-trial') {
+        const Flanker = requirePlugin('flanker (window.jsPsychFlanker)', window.jsPsychFlanker);
         timeline.push({
           ...item,
-          type: window.jsPsychFlanker,
+          type: Flanker,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
           data: { plugin_type: type, task_type: 'flanker' }
         });
@@ -314,9 +632,10 @@
 
       // SART task
       if (type === 'sart-trial') {
+        const Sart = requirePlugin('sart (window.jsPsychSart)', window.jsPsychSart);
         timeline.push({
           ...item,
-          type: window.jsPsychSart,
+          type: Sart,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
           data: { plugin_type: type, task_type: 'sart' }
         });
@@ -325,17 +644,26 @@
 
       // Gabor task
       if (type === 'gabor-trial') {
+        const Gabor = requirePlugin('gabor (window.jsPsychGabor)', window.jsPsychGabor);
+        const onStart = typeof item.on_start === 'function' ? item.on_start : null;
+        const onFinish = typeof item.on_finish === 'function' ? item.on_finish : null;
+
         const itemCopy = { ...item };
         delete itemCopy.type;
+        delete itemCopy.on_start;
+        delete itemCopy.on_finish;
 
         timeline.push({
-          type: window.jsPsychGabor,
+          type: Gabor,
 
           // Inherit experiment-wide gabor settings by default.
           ...gaborDefaults,
 
           // Allow per-trial overrides.
           ...itemCopy,
+
+          ...(onStart ? { on_start: onStart } : {}),
+          ...(onFinish ? { on_finish: onFinish } : {}),
 
           data: {
             plugin_type: type,
@@ -349,7 +677,7 @@
 
       // Unknown component types: show as a debug screen.
       timeline.push({
-        type: jsPsychHtmlKeyboardResponse,
+        type: HtmlKeyboard,
         stimulus: `<div style="max-width: 900px; margin: 0 auto; text-align:left;">
           <h3>Unsupported component</h3>
           <div><b>type</b>: ${String(type)}</div>
@@ -389,6 +717,14 @@
 
   function normalizeRdmParams(params) {
     const p = isObject(params) ? { ...params } : {};
+
+    // Allow nested config style: per-trial overrides may provide aperture fields under
+    // `aperture_parameters: { ... }`. Flatten any missing keys for convenience.
+    if (isObject(p.aperture_parameters)) {
+      for (const [k, v] of Object.entries(p.aperture_parameters)) {
+        if (p[k] === undefined) p[k] = v;
+      }
+    }
 
     // Builder commonly exports aperture parameters as { shape, diameter }.
     if (p.aperture_shape === undefined && p.shape !== undefined) {
