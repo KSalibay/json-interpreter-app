@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PsychJSON Interpreter</title>
 
+  <link rel="icon" href="data:," />
+
   <!-- jsPsych v8 -->
   <link href="https://unpkg.com/jspsych@8.2.3/css/jspsych.css" rel="stylesheet" />
 
@@ -14,19 +16,23 @@
       margin: 0;
     }
 
-    /* Minimal chrome: let the JSON-defined jsPsych content be the UI */
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
     #jspsych-target {
       width: 100%;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
+      position: relative;
+    }
+
+    /* Ensure jsPsych's internal wrappers don't clip full-viewport plugins */
+    .jspsych-display-element {
+      width: 100vw;
+      height: 100vh;
+      overflow: visible;
+    }
+    #jspsych-content {
+      width: 100%;
+      height: 100%;
+      max-width: none;
     }
   </style>
 </head>
@@ -39,16 +45,17 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0/dist/index.browser.min.js"></script>
 
   <!-- Interpreter runtime -->
-  <script src="src/rdmEngine.js"></script>
-  <script src="src/jspsych-rdm.js"></script>
-  <script src="src/jspsych-rdm-continuous.js"></script>
-  <script src="src/jspsych-survey-response.js"></script>
-  <script src="src/jspsych-flanker.js"></script>
-  <script src="src/jspsych-sart.js"></script>
-  <script src="src/jspsych-gabor.js"></script>
-  <script src="src/eyeTrackingWebgazer.js"></script>
-  <script src="src/configLoader.js"></script>
-  <script src="src/timelineCompiler.js"></script>
-  <script src="src/main.js"></script>
+  <script src="src/rdmEngine.js?v=20260207"></script>
+  <script src="src/jspsych-rdm.js?v=20260207"></script>
+  <script src="src/jspsych-rdm-continuous.js?v=20260207"></script>
+  <script src="src/jspsych-survey-response.js?v=20260207"></script>
+  <script src="src/jspsych-flanker.js?v=20260207"></script>
+  <script src="src/jspsych-sart.js?v=20260207"></script>
+  <script src="src/jspsych-gabor.js?v=20260207"></script>
+  <script src="src/jspsych-soc-dashboard.js?v=20260207"></script>
+  <script src="src/eyeTrackingWebgazer.js?v=20260207"></script>
+  <script src="src/configLoader.js?v=20260207"></script>
+  <script src="src/timelineCompiler.js?v=20260207"></script>
+  <script src="src/main.js?v=20260207"></script>
 </body>
 </html>

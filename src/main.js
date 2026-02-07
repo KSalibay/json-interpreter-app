@@ -19,11 +19,12 @@
     try {
       const params = new URLSearchParams(window.location.search);
       const v = (params.get('debug') || '').toString().trim().toLowerCase();
-      if (v === 'json') return 'json';
-      // Default to CSV when debug is enabled.
-      return 'csv';
+      if (v === 'csv') return 'csv';
+      if (v === 'json' || v === '1' || v === 'true' || v === 'yes') return 'json';
+      // Default to JSON when debug is enabled (best for nested fields like events[]).
+      return 'json';
     } catch {
-      return 'csv';
+      return 'json';
     }
   }
 
@@ -114,14 +115,15 @@
       else console.warn('Adaptive validate had warnings (see above)');
     }
 
-    // Quick Gabor parameter check: ensure defaults propagated into compiled trials.
-    const firstGabor = tl.find((t) => t && t.data && t.data.task_type === 'gabor');
+    // Quick Gabor parameter check (helps catch unit mistakes).
+    const firstGabor = tl.find((t) => t && t.data && typeof t.data === 'object' && t.data.plugin_type === 'gabor');
     if (firstGabor) {
       console.log('Gabor param check:', {
         spatial_frequency_cyc_per_px: formatNum(firstGabor.spatial_frequency_cyc_per_px),
         grating_waveform: firstGabor.grating_waveform
       });
     }
+
     console.groupEnd();
   }
 
@@ -479,7 +481,7 @@
 
     if (fmt === 'json') {
       const values = Array.isArray(overrideValues) ? overrideValues : getJsPsychValues(jsPsych);
-      const dataJson = JSON.stringify(values);
+      const dataJson = JSON.stringify(values, null, 2);
       const ok = downloadTextFile(dataJson, `psychjson-data-${safeId}-${stamp}.json`, 'application/json');
       if (typeof delayedEyeDownload === 'function') setTimeout(delayedEyeDownload, 250);
       return ok;
@@ -496,13 +498,104 @@
     return ok;
   }
 
-  function setStatus(msg) {
-    if (els.statusBox) {
-      els.statusBox.textContent = msg;
-    } else {
-      // Minimal UI mode: fall back to console.
-      console.log('[Interpreter]', msg);
+  function renderLocalCompletionScreen(idForName, values, debugWasEnabled) {
+    try {
+      const host = els.jspsychTarget;
+      if (!host) return;
+
+      const safeId = escapeHtml(String(idForName || 'local').trim() || 'local');
+      const rows = Array.isArray(values) ? values : [];
+      const rowCount = rows.length;
+
+      let socTrialCount = 0;
+      let socEventCount = 0;
+      for (const r of rows) {
+        if (!r || typeof r !== 'object') continue;
+        if (r.plugin_type === 'soc-dashboard' && Array.isArray(r.events)) {
+          socTrialCount += 1;
+          socEventCount += r.events.length;
+        }
+      }
+
+      const hint = debugWasEnabled
+        ? 'If your browser blocked automatic downloads, use the button below to download again.'
+        : 'Tip: add <code>&debug=1</code> to auto-download data at the end.';
+
+      host.innerHTML = `
+        <div style="max-width: 900px; margin: 0 auto; padding: 28px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;">
+          <h2 style="margin: 0 0 10px 0;">Experiment finished</h2>
+          <div style="opacity: 0.75; margin-bottom: 18px;">Config: <b>${safeId}</b></div>
+
+          <div style="border: 1px solid rgba(0,0,0,0.10); border-radius: 12px; padding: 14px 16px; background: rgba(0,0,0,0.03);">
+            <div><b>Rows:</b> ${rowCount}</div>
+            <div><b>SOC trials:</b> ${socTrialCount} • <b>SOC events:</b> ${socEventCount}</div>
+          </div>
+
+          <div style="margin-top: 16px; display:flex; gap: 10px; flex-wrap: wrap;">
+            <button id="dl_debug_data" style="padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: #0ea5e9; color: white; cursor: pointer;">Download data (JSON)</button>
+            <button id="run_again" style="padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: white; cursor: pointer;">Run again</button>
+          </div>
+
+          <div style="margin-top: 14px; opacity: 0.85;">${hint}</div>
+        </div>
+      `;
+
+      const dlBtn = host.querySelector('#dl_debug_data');
+      if (dlBtn) {
+        dlBtn.addEventListener('click', () => {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            // Force JSON download from this button regardless of debug param.
+            params.set('debug', 'json');
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState({}, '', newUrl);
+          } catch {
+            // ignore
+          }
+          downloadDebugData(null, idForName, rows);
+        });
+      }
+
+      const runBtn = host.querySelector('#run_again');
+      if (runBtn) {
+        runBtn.addEventListener('click', () => {
+          try {
+            window.location.reload();
+          } catch {
+            // ignore
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to render local completion screen:', e);
     }
+  }
+
+  function setStatus(msg) {
+    try {
+      if (els.statusBox) {
+        els.statusBox.textContent = msg;
+      } else {
+        console.log('[Interpreter]', msg);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Make silent failures visible (especially in local static hosting).
+  try {
+    window.addEventListener('error', (e) => {
+      const m = (e && e.message) ? e.message : 'Unknown error';
+      setStatus(`Runtime error: ${m}`);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const r = e && e.reason;
+      const m = (r && r.message) ? r.message : String(r || 'Unhandled promise rejection');
+      setStatus(`Unhandled rejection: ${m}`);
+    });
+  } catch {
+    // ignore
   }
 
   function detectJatos() {
@@ -883,8 +976,20 @@
 
     setStatus(`Compiled timeline: ${compiled.timeline.length} items (${compiled.experimentType}). Starting...`);
 
+    const displayEl = els.jspsychTarget || document.getElementById('jspsych-target') || document.body;
+
+    // Ensure the mount container is actually visible and viewport-sized.
+    try {
+      displayEl.style.display = 'block';
+      displayEl.style.width = '100%';
+      displayEl.style.minHeight = '100vh';
+      displayEl.style.position = displayEl.style.position || 'relative';
+    } catch {
+      // ignore
+    }
+
     const jsPsych = initJsPsych({
-      display_element: 'jspsych-target',
+      display_element: displayEl,
       on_finish: async () => {
         try {
           if (eyeHud && typeof eyeHud.stop === 'function') eyeHud.stop();
@@ -983,6 +1088,15 @@
           const params = new URLSearchParams(window.location.search);
           const id = (params.get('id') || 'local').toString().trim() || 'local';
           downloadDebugData(jsPsych, id, finalValues);
+        }
+
+        // Always show a local completion screen (prevents "blank page" confusion).
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const id = (params.get('id') || 'local').toString().trim() || 'local';
+          renderLocalCompletionScreen(id, finalValues, getDebugMode());
+        } catch {
+          // ignore
         }
 
         // Local fallback: dump to console
@@ -1173,8 +1287,20 @@
 
     setStatus(`Loaded ${seq.length} config(s) for code ${code}. Timeline length: ${timeline.length}. Starting...`);
 
+    const displayEl = els.jspsychTarget || document.getElementById('jspsych-target') || document.body;
+
+    // Ensure the mount container is actually visible and viewport-sized.
+    try {
+      displayEl.style.display = 'block';
+      displayEl.style.width = '100%';
+      displayEl.style.minHeight = '100vh';
+      displayEl.style.position = displayEl.style.position || 'relative';
+    } catch {
+      // ignore
+    }
+
     const jsPsych = initJsPsych({
-      display_element: 'jspsych-target',
+      display_element: displayEl,
       on_finish: async () => {
         try {
           if (eyeHud && typeof eyeHud.stop === 'function') eyeHud.stop();
@@ -1287,6 +1413,13 @@
 
         if (getDebugMode()) {
           downloadDebugData(jsPsych, String(code || 'multi'), finalValues);
+        }
+
+        // Always show a local completion screen (prevents "blank page" confusion).
+        try {
+          renderLocalCompletionScreen(String(code || 'multi'), finalValues, getDebugMode());
+        } catch {
+          // ignore
         }
 
         console.log('Experiment finished. Data:', jsPsych.data.get().values());

@@ -50,6 +50,63 @@ Validation (local):
 If Live Server doesn't expose a directory listing, generate/update the manifest:
 - PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/generate-manifest.ps1`
 
+## SOC Dashboard (Feb 2026)
+
+The interpreter includes a custom jsPsych plugin that renders a multi-window “SOC desktop” inside a single jsPsych trial.
+
+- Timeline `type`: `"soc-dashboard"` (plugin: `src/jspsych-soc-dashboard.js`)
+- Compiled by: `src/timelineCompiler.js` (loads `window.jsPsychSocDashboard`)
+- Optional global defaults: top-level `soc_dashboard_settings` is merged into each SOC Dashboard trial.
+
+### Included sample configs
+
+- `.../index.html?id=sample_soc_sart_10s&debug=1`
+- `.../index.html?id=sample_soc_nback_10s&debug=1`
+- Overlap demo (scheduled windows): `.../index.html?id=sample_soc_nback_sart_overlap&debug=1`
+
+Note: pass the config id **without** the `.json` suffix.
+
+### Subtasks (inside `subtasks[]`)
+
+Implemented subtask types:
+
+- `sart-like` — log triage Go/No-Go
+  - GO commits a triage action that is consistent for the whole run:
+    - `go_condition: "target"`  → GO yields `ALLOW`
+    - `go_condition: "distractor"` → GO yields `BLOCK`
+  - `show_markers` (default false) toggles target/distractor badges.
+  - `instructions` supports placeholder substitution: `{{GO_CONTROL}}`, `{{TARGETS}}`, `{{DISTRACTORS}}`.
+
+- `nback-like` — alert correlation ($n$-back)
+  - `match_field: "src_ip" | "username"`
+  - `response_paradigm: "go_nogo" | "2afc"`
+  - `instructions` supports placeholders: `{{GO_CONTROL}}`, `{{NOGO_CONTROL}}`, `{{N}}`, `{{MATCH_FIELD}}`.
+
+Planned / placeholders (next session):
+
+- `flanker-like` (TBD)
+- `wcst-like` (TBD)
+
+### Scheduling (automatic window show/hide)
+
+Each subtask can include optional timing fields to automatically show/hide the window during the SOC Dashboard trial:
+
+- `start_at_ms` or `start_delay_ms`
+- `duration_ms` (preferred) or `end_at_ms`
+
+If any timing field is set, the window is scheduled:
+
+- The window appears/disappears automatically based on the schedule.
+- The **subtask itself does not start** until the participant clicks its instruction popup (if `instructions` is non-empty). This anchors `t_subtask_ms` to a true, participant-controlled start.
+
+### Data output
+
+SOC Dashboard data is written into the trial’s `events` array. Key event types include:
+
+- Window lifecycle: `subtask_window_show`, `subtask_window_hide`
+- SART-like: `sart_subtask_start`, `sart_present`, `sart_response`, `sart_miss`, `sart_subtask_end`
+- N-back-like: `nback_subtask_start`, `nback_present`, `nback_response`, `nback_no_response`, `nback_subtask_end`
+
 ## JATOS
 
 When hosted inside JATOS, the page will detect `window.jatos` and will:

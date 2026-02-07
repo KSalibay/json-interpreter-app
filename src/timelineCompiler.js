@@ -452,9 +452,12 @@
 
     const timeline = [];
 
-    // Continuous mode: run the entire expanded sequence inside one plugin trial
+    // Continuous mode (RDM only): run the entire expanded sequence inside one plugin trial
     // so we don't re-render the DOM between frames.
-    if (experimentType === 'continuous') {
+    //
+    // Other task types (e.g., soc-dashboard prototype) compile as normal trials even if
+    // experiment_type is set to "continuous".
+    if (experimentType === 'continuous' && taskType === 'rdm') {
       const frames = [];
       for (const item of expanded) {
         const type = item.type;
@@ -539,6 +542,10 @@
     for (const item of expanded) {
       const type = item.type;
 
+      const socDefaults = (type === 'soc-dashboard' && isObject(config?.soc_dashboard_settings))
+        ? config.soc_dashboard_settings
+        : null;
+
         if (type === 'html-keyboard-response' || type === 'instructions') {
         timeline.push({
           type: HtmlKeyboard,
@@ -565,6 +572,19 @@
           questions: Array.isArray(item.questions) ? item.questions : [],
           detection_response_task_enabled: item.detection_response_task_enabled === true,
           data: { plugin_type: type }
+        });
+        continue;
+      }
+
+      if (type === 'soc-dashboard') {
+        const SocDashboard = requirePlugin('soc-dashboard (window.jsPsychSocDashboard)', window.jsPsychSocDashboard);
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+        timeline.push({
+          type: SocDashboard,
+          ...(socDefaults ? { ...socDefaults } : {}),
+          ...itemCopy,
+          data: { plugin_type: type, task_type: 'soc-dashboard' }
         });
         continue;
       }

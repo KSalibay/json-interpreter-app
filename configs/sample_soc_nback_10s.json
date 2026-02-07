@@ -1,0 +1,45 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 820px; margin: 0 auto; text-align: left;\">\n  <h2>SOC Dashboard (10s N-back debug)</h2>\n  <p>This config runs a single N-back-like alert correlation window for about 10 seconds.</p>\n  <p>Run with <code>?debug=1</code> to auto-download the data JSON at the end.</p>\n  <p>Press any key to start.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-dashboard",
+      "title": "SOC Dashboard",
+      "trial_duration_ms": 11000,
+      "end_key": "escape",
+      "default_app": "soc",
+      "num_tasks": 1,
+      "icons_clickable": true,
+      "log_icon_clicks": true,
+      "icon_clicks_are_distractors": true,
+      "subtasks": [
+        {
+          "type": "nback-like",
+          "title": "Repeat-offender monitor",
+          "instructions_title": "Correlating repeat offenders",
+          "instructions": "<p>Track the stream of alerts and press <b>{{GO_CONTROL}}</b> when the <b>{{MATCH_FIELD}}</b> matches the one from <b>{{N}} alerts ago</b>.</p>\n<p>If it does <i>not</i> match, do nothing.</p>\n<p><i>Click this popup to begin.</i></p>",
+          "n": 2,
+          "match_field": "src_ip",
+          "response_paradigm": "go_nogo",
+          "go_key": "space",
+          "stimulus_interval_ms": 900,
+          "target_probability": 0.3,
+          "min_run_ms": 10000,
+          "max_run_ms": 10000,
+          "show_feedback": true
+        }
+      ]
+    }
+  ]
+}

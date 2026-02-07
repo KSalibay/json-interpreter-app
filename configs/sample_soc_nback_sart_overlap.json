@@ -1,0 +1,80 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 900px; margin: 0 auto; text-align: left;\">\n  <h2>SOC Dashboard (Scheduled overlap demo)</h2>\n  <p>This config shows <b>two SOC subtasks</b> (N-back-like + SART-like) in parallel windows with scheduled start/end times.</p>\n  <ul>\n    <li><b>N-back</b>: shows at t=0s, runs for 20s.</li>\n    <li><b>SART</b>: shows at t=15s, runs for 15s.</li>\n    <li>Overlap window: t=15s–20s (5s).</li>\n  </ul>\n  <p>Run with <code>?debug=1</code> to auto-download the data JSON at the end.</p>\n  <p>Press any key to start.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-dashboard",
+      "title": "SOC Dashboard",
+      "trial_duration_ms": 32000,
+      "end_key": "escape",
+      "default_app": "soc",
+      "num_tasks": 2,
+      "icons_clickable": true,
+      "log_icon_clicks": true,
+      "icon_clicks_are_distractors": true,
+      "subtasks": [
+        {
+          "type": "nback-like",
+          "title": "Repeat-offender monitor",
+          "instructions_title": "Correlating repeat offenders",
+          "instructions": "<p>Press <b>{{GO_CONTROL}}</b> when the <b>{{MATCH_FIELD}}</b> matches the one from <b>{{N}} alerts ago</b>. If it does not match, do nothing.</p>",
+          "start_at_ms": 0,
+          "duration_ms": 20000,
+          "n": 2,
+          "match_field": "src_ip",
+          "response_paradigm": "go_nogo",
+          "go_key": "space",
+          "stimulus_interval_ms": 900,
+          "target_probability": 0.3,
+          "min_run_ms": 20000,
+          "max_run_ms": 20000,
+          "show_feedback": true
+        },
+        {
+          "type": "sart-like",
+          "title": "Login monitor",
+          "instructions_title": "Filtering harmful logins",
+          "instructions": "<p>Press <b>{{GO_CONTROL}}</b> to filter through login attempts.</p>\n<p><b>Harmful (targets)</b>: {{TARGETS}}</p>\n<p><b>Benign (distractors)</b>: {{DISTRACTORS}}</p>",
+          "start_at_ms": 15000,
+          "duration_ms": 15000,
+          "show_markers": false,
+          "visible_entries": 8,
+          "scroll_interval_ms": 900,
+          "min_run_ms": 15000,
+          "max_run_ms": 15000,
+          "response_device": "keyboard",
+          "go_key": "space",
+          "go_condition": "target",
+          "highlight_subdomains": true,
+          "target_highlight_color": "#22c55e",
+          "distractor_highlight_color": "#ef4444",
+          "target_subdomains": [
+            "secure-login.example",
+            "admin-portal.example"
+          ],
+          "distractor_subdomains": [
+            "status.example",
+            "helpdesk.example"
+          ],
+          "neutral_subdomains": [
+            "mail.example",
+            "intranet.example"
+          ],
+          "target_probability": 0.25,
+          "distractor_probability": 0.15
+        }
+      ]
+    }
+  ]
+}

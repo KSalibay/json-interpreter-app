@@ -1,0 +1,61 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 800px; margin: 0 auto; text-align: left;\">\n  <h2>SOC Dashboard (10s debug)</h2>\n  <p>This config runs a single SART-like log triage window for about 10 seconds.</p>\n  <p>Run with <code>?debug=1</code> to auto-download the data JSON at the end.</p>\n  <p>Press any key to start.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-dashboard",
+      "title": "SOC Dashboard",
+      "trial_duration_ms": 11000,
+      "end_key": "escape",
+      "default_app": "soc",
+      "num_tasks": 1,
+      "icons_clickable": true,
+      "log_icon_clicks": true,
+      "icon_clicks_are_distractors": true,
+      "subtasks": [
+        {
+          "type": "sart-like",
+          "title": "Login monitor",
+          "instructions_title": "Filtering harmful logins",
+          "instructions": "<p>Please press <b>{{GO_CONTROL}}</b> to filter through login attempts.</p>\n<p>Press <b>{{GO_CONTROL}}</b> to allow safe logins, and block harmful ones.</p>\n<p><b>Harmful (targets)</b>: {{TARGETS}}</p>\n<p><b>Benign (distractors)</b>: {{DISTRACTORS}}</p>\n<p><i>Click this popup to begin.</i></p>",
+          "show_markers": false,
+          "visible_entries": 8,
+          "scroll_interval_ms": 900,
+          "min_run_ms": 10000,
+          "max_run_ms": 10000,
+          "response_device": "keyboard",
+          "go_key": "space",
+          "go_condition": "target",
+          "highlight_subdomains": true,
+          "target_highlight_color": "#22c55e",
+          "distractor_highlight_color": "#ef4444",
+          "target_subdomains": [
+            "secure-login.example",
+            "admin-portal.example"
+          ],
+          "distractor_subdomains": [
+            "status.example",
+            "helpdesk.example"
+          ],
+          "neutral_subdomains": [
+            "mail.example",
+            "intranet.example"
+          ],
+          "target_probability": 0.25,
+          "distractor_probability": 0.15
+        }
+      ]
+    }
+  ]
+}

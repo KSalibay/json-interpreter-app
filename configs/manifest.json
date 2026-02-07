@@ -9,6 +9,9 @@
     "sample_adaptive_rdm_staircase.json",
     "sample_continuous.json",
     "sample_continuous_dot_groups.json",
+    "sample_soc_nback_10s.json",
+    "sample_soc_nback_sart_overlap.json",
+    "sample_soc_sart_10s.json",
     "sample_trial_based.json"
 ]
 
