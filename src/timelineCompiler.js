@@ -396,6 +396,21 @@
   function compileToJsPsychTimeline(config) {
     if (!isObject(config)) throw new Error('Config must be an object');
 
+    function wrapGaborScreenHtml(stimulusHtml, promptHtml) {
+      const stim = (stimulusHtml === null || stimulusHtml === undefined) ? '' : String(stimulusHtml);
+      const prm = (promptHtml === null || promptHtml === undefined) ? '' : String(promptHtml);
+      return `
+        <div class="gabor-wrap">
+          <div class="gabor-stage">
+            <div class="gabor-text">
+              ${stim}
+              ${prm ? `<div class="gabor-prompt">${prm}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     function resolvePlugin(p) {
       if (typeof p === 'function') return p;
       if (p && typeof p === 'object' && typeof p.default === 'function') return p.default;
@@ -420,6 +435,7 @@
 
     const experimentType = config.experiment_type || 'trial-based';
     const taskType = config.task_type || 'rdm';
+    const useGaborStageForInstructions = String(taskType).toLowerCase() === 'gabor';
 
     const baseRdmParams = normalizeRdmParams({
       ...(isObject(config.display_settings) ? config.display_settings : {}),
@@ -549,8 +565,8 @@
         if (type === 'html-keyboard-response' || type === 'instructions') {
         timeline.push({
           type: HtmlKeyboard,
-          stimulus: item.stimulus || '',
-          prompt: (item.prompt === undefined ? null : item.prompt),
+          stimulus: useGaborStageForInstructions ? wrapGaborScreenHtml(item.stimulus || '', (item.prompt === undefined ? null : item.prompt)) : (item.stimulus || ''),
+          prompt: useGaborStageForInstructions ? null : (item.prompt === undefined ? null : item.prompt),
           choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
           stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
           trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),

@@ -298,13 +298,16 @@
     ctx.fillStyle = '#0b0b0b';
     ctx.fillRect(0, 0, w, h);
 
-    // Layout similar to builder preview
+    // Responsive layout
     const pad = 24;
-    const patchSize = Math.min(240, Math.floor((w - pad * 2) / 3));
-    const frameSize = patchSize + 48;
-    const cy = Math.floor(h * 0.60);
-    const leftCx = Math.floor(w * 0.32);
-    const rightCx = Math.floor(w * 0.68);
+    const minDim = Math.max(1, Math.min(w, h));
+    const patchSize = clamp(Math.floor(minDim * 0.34), 160, 420);
+    const frameSize = patchSize + Math.floor(patchSize * 0.22);
+
+    // Center stimulus vertically within the canvas.
+    const cy = Math.floor(h / 2);
+    const leftCx = Math.floor(w * 0.33);
+    const rightCx = Math.floor(w * 0.67);
 
     // Frames + placeholder circles
     drawRoundedRectStroke(ctx, leftCx - frameSize / 2, cy - frameSize / 2, frameSize, frameSize, 18, leftFrameColor, 7);
@@ -321,7 +324,7 @@
 
     // Cue
     if (showCue) {
-      drawCueArrow(ctx, Math.floor(w / 2), Math.floor(h * 0.18), spatialCue);
+      drawCueArrow(ctx, Math.floor(w / 2), Math.floor(h * 0.22), spatialCue);
     }
 
     // Stimulus / mask
@@ -417,6 +420,9 @@
       let stimulusOnsetTs = null;
       let responseListenerStarted = false;
 
+      let currentPhase = 'fixation';
+      let currentRenderOpts = { showCue: false, showStimulus: false, showMask: false };
+
       const timeouts = [];
       const safeSetTimeout = (fn, ms) => {
         const id = this.jsPsych.pluginAPI.setTimeout(fn, ms);
@@ -424,8 +430,15 @@
         return id;
       };
 
+      let resizeHandler = null;
+
       const endTrial = (reason) => {
         this.jsPsych.pluginAPI.cancelAllKeyboardResponses();
+
+        if (resizeHandler) {
+          try { window.removeEventListener('resize', resizeHandler); } catch { /* ignore */ }
+          resizeHandler = null;
+        }
 
         // Best effort: clear pending timeouts
         if (typeof this.jsPsych.pluginAPI.clearAllTimeouts === 'function') {
@@ -486,16 +499,58 @@
 
       // DOM
       display_element.innerHTML = `
-        <div id="gabor-wrap" style="position:relative; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-          <canvas id="gabor-canvas" width="900" height="450" style="width:min(1000px, 96vw); height:auto; display:block; background:#0b0b0b; border-radius: 10px;"></canvas>
+        <div id="gabor-wrap" class="gabor-wrap">
+          <div class="gabor-stage">
+            <canvas id="gabor-canvas"></canvas>
+            <div class="gabor-hint" id="gabor-hint"></div>
+          </div>
         </div>
       `;
 
       const wrapEl = display_element.querySelector('#gabor-wrap');
       const canvas = display_element.querySelector('#gabor-canvas');
 
+      const hintEl = display_element.querySelector('#gabor-hint');
+      if (hintEl) {
+        if (responseTask === 'detect_target') {
+          hintEl.textContent = `${String(yesKey)} = yes, ${String(noKey)} = no`;
+        } else {
+          hintEl.textContent = `${String(leftKey)} = left tilt, ${String(rightKey)} = right tilt`;
+        }
+      }
+
+      const fitCanvasToViewport = () => {
+        if (!canvas) return;
+
+        const vw = Math.max(1, window.innerWidth || 1);
+        const vh = Math.max(1, window.innerHeight || 1);
+
+        // Keep a 2:1 aspect ratio, but fill a meaningful portion of the viewport.
+        const maxCssW = Math.min(1120, Math.floor(vw * 0.96));
+        const maxCssH = Math.floor(vh * 0.80);
+
+        let cssW = maxCssW;
+        let cssH = Math.floor(cssW / 2);
+        if (cssH > maxCssH) {
+          cssH = maxCssH;
+          cssW = Math.floor(cssH * 2);
+        }
+
+        cssW = clamp(cssW, 520, 2000);
+        cssH = clamp(cssH, 260, 1400);
+
+        canvas.style.width = `${Math.round(cssW)}px`;
+        canvas.style.height = `${Math.round(cssH)}px`;
+        canvas.width = Math.round(cssW);
+        canvas.height = Math.round(cssH);
+      };
+
       const render = (phase, opts) => {
         if (!canvas) return;
+
+        currentPhase = phase || currentPhase;
+        currentRenderOpts = opts || currentRenderOpts;
+
         renderGaborScene(canvas, {
           phase,
           spatialCue,
@@ -510,6 +565,14 @@
           showMask: !!opts?.showMask
         });
       };
+
+      // Ensure the canvas fills the viewport nicely and stays centered.
+      fitCanvasToViewport();
+      resizeHandler = () => {
+        fitCanvasToViewport();
+        render(currentPhase, currentRenderOpts);
+      };
+      try { window.addEventListener('resize', resizeHandler); } catch { /* ignore */ }
 
       // Keyboard response handler (starts at stimulus onset)
       const startResponseListener = () => {
