@@ -19,7 +19,7 @@
 
   const info = {
     name: 'soc-dashboard',
-    version: '0.6.2',
+    version: '0.6.5',
     parameters: {
       trial_duration_ms: { type: PT.INT, default: 60000 },
       end_key: { type: PT.STRING, default: 'escape' },
@@ -135,7 +135,7 @@
       .soc-icon .lbl { font-size: 12px; opacity: 0.95; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
 
       .soc-windows { position:absolute; top: 18px; right: 18px; bottom: 18px; left: 140px; display:grid; gap: 12px; grid-auto-rows: 1fr; z-index: 3; }
-      .soc-appwin { background: rgba(12,16,26,0.88); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; box-shadow: 0 18px 55px rgba(0,0,0,0.50); overflow:hidden; min-height: 0; }
+      .soc-appwin { position: relative; background: rgba(12,16,26,0.88); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; box-shadow: 0 18px 55px rgba(0,0,0,0.50); overflow:hidden; min-height: 0; }
       /* Keep grid position stable when windows hide/show */
       .soc-appwin.soc-win-hidden { visibility: hidden; pointer-events: none; }
       .soc-appwin .titlebar { height: 38px; display:flex; align-items:center; gap: 10px; padding: 0 12px; background: rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.10); }
@@ -170,7 +170,7 @@
 
       /* Per-subtask instructions overlay */
       .soc-card.soc-subtask-wrap { position: relative; }
-      .soc-subtask-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.72); backdrop-filter: blur(6px); }
+      .soc-subtask-overlay { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.72); backdrop-filter: blur(6px); }
       .soc-subtask-overlay .panel { max-width: 620px; width: 100%; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: rgba(12,16,26,0.92); box-shadow: 0 20px 70px rgba(0,0,0,0.60); padding: 14px 14px; cursor: pointer; }
       .soc-subtask-overlay .panel h3 { margin: 0 0 8px 0; font-size: 14px; }
       .soc-subtask-overlay .panel .body { font-size: 12px; opacity: 0.95; line-height: 1.45; }
@@ -192,6 +192,38 @@
       .soc-nback-pill { display:inline-block; font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); }
       .soc-nback-flash { animation: socFlash 220ms ease-out; }
       @keyframes socFlash { from { box-shadow: 0 0 0 0 rgba(14,165,233,0.35); } to { box-shadow: 0 0 0 10px rgba(14,165,233,0.0); } }
+
+      /* WCST-like (email sorting) */
+      .soc-wcst-header { display:flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+      .soc-wcst-header .hint { font-size: 12px; opacity: 0.85; }
+      .soc-wcst-header .actions { display:flex; align-items:center; gap: 8px; }
+      .soc-wcst-help-btn { font-size: 11px; padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer; }
+      .soc-wcst-help-btn:hover { background: rgba(255,255,255,0.12); }
+      .soc-wcst-shell { display: grid; grid-template-columns: 1fr; gap: 10px; }
+      .soc-wcst-email { border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; }
+      .soc-wcst-email .top { display:flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+      .soc-wcst-email .from { font-size: 12px; }
+      .soc-wcst-email .subj { margin-top: 8px; font-size: 12px; }
+      .soc-wcst-email .prev { margin-top: 6px; font-size: 12px; }
+      .soc-wcst-email .meta { margin-top: 10px; display:flex; gap: 6px; flex-wrap: wrap; }
+      .soc-wcst-pill { display:inline-block; font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); }
+      .soc-wcst-targets { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .soc-wcst-target { text-align:left; padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: inherit; cursor: pointer; }
+      .soc-wcst-target:hover { background: rgba(255,255,255,0.07); }
+      .soc-wcst-target.selected { box-shadow: inset 0 0 0 2px rgba(250,204,21,0.55); }
+      .soc-wcst-target.correct { box-shadow: inset 0 0 0 2px rgba(34,197,94,0.55); }
+      .soc-wcst-target.incorrect { box-shadow: inset 0 0 0 2px rgba(239,68,68,0.55); }
+      .soc-wcst-target-top { display:flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 8px; }
+      .soc-wcst-kv { display:grid; grid-template-columns: 90px 1fr; gap: 6px 10px; font-size: 12px; }
+      .soc-wcst-kv .k { opacity: 0.78; }
+      .soc-wcst-footer { font-size: 12px; }
+
+      .soc-wcst-help-overlay { position: absolute; inset: 0; z-index: 55; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.72); backdrop-filter: blur(6px); }
+      .soc-wcst-help-overlay.show { display: flex; }
+      .soc-wcst-help-overlay .panel { max-width: 720px; width: 100%; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: rgba(12,16,26,0.94); box-shadow: 0 20px 70px rgba(0,0,0,0.60); padding: 14px; cursor: pointer; }
+      .soc-wcst-help-overlay .panel h3 { margin: 0 0 8px 0; font-size: 14px; }
+      .soc-wcst-help-overlay .panel .body { font-size: 12px; opacity: 0.95; line-height: 1.45; }
+      .soc-wcst-help-overlay .panel .hint { margin-top: 10px; font-size: 12px; opacity: 0.80; }
     `;
     return style;
   }
@@ -441,6 +473,9 @@
     const subtaskForceEnd = new Array(windowsSpec.length).fill(null);
     const windowHasStarted = new Array(windowsSpec.length).fill(false);
 
+    const flankerStates = new Array(windowsSpec.length).fill(null);
+    const wcstStates = new Array(windowsSpec.length).fill(null);
+
     // Per-window instruction popup (click-to-start)
     const windowInstructionsHost = new Array(windowsSpec.length).fill(null);
     const windowInstructionsTitle = new Array(windowsSpec.length).fill(null);
@@ -458,7 +493,7 @@
       for (let i = 0; i < windowsSpec.length; i++) {
         if (!isWindowVisible(i)) continue;
         const t = (windowsSpec[i]?.subtask_type ?? '').toString().toLowerCase();
-        if (t === 'sart-like' || t === 'nback-like') return i;
+        if (t === 'sart-like' || t === 'nback-like' || t === 'flanker-like' || t === 'wcst-like') return i;
       }
       for (let i = 0; i < windowsSpec.length; i++) {
         if (isWindowVisible(i)) return i;
@@ -659,6 +694,8 @@
 
       const isSartLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'sart-like';
       const isNbackLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'nback-like';
+      const isFlankerLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'flanker-like';
+      const isWcstLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'wcst-like';
       const winId = `soc_win_${i}`;
 
       w.innerHTML = `
@@ -679,7 +716,809 @@
       const subtaskInstructionsTitleRaw = (wSpec?.subtask?.instructions_title ?? '').toString();
       const subtaskInstructionsTitle = subtaskInstructionsTitleRaw.trim() ? subtaskInstructionsTitleRaw : null;
 
-      if (!isSartLike && !isNbackLike) {
+      if (isWcstLike) {
+        const coerceWcstLikeConfig = (raw) => {
+          const o = (raw && typeof raw === 'object') ? raw : {};
+
+          const parseList = (x) => {
+            if (x === null || x === undefined) return [];
+            return String(x)
+              .split(/[\n,]+/g)
+              .map(s => s.trim())
+              .filter(Boolean);
+          };
+
+          const coerceFour = (x, defaults) => {
+            const out = parseList(x);
+            const d = Array.isArray(defaults) ? defaults : [];
+            const arr = out.length ? out : d.slice();
+            const trimmed = arr.slice(0, 4);
+            while (trimmed.length < 4) trimmed.push(d[trimmed.length] ?? `value${trimmed.length + 1}`);
+            return trimmed;
+          };
+
+          const parseLines = (x) => {
+            if (x === null || x === undefined) return [];
+            const s = String(x);
+            const lines = s.split(/\r?\n/g).map(v => v.trim()).filter(Boolean);
+            if (lines.length >= 1) return lines;
+            return parseList(s);
+          };
+
+          const responseDevice = ((o.response_device ?? 'keyboard').toString().trim().toLowerCase() === 'mouse') ? 'mouse' : 'keyboard';
+
+          const mouseMode = ((o.mouse_response_mode ?? o.mouse_mode ?? 'click').toString().trim().toLowerCase() === 'drag') ? 'drag' : 'click';
+
+          const keysRaw = (o.choice_keys ?? o.response_keys ?? '1,2,3,4').toString();
+          const choiceKeys = keysRaw
+            .split(',')
+            .map(s => normalizeKeyName(s))
+            .filter(Boolean)
+            .slice(0, 4);
+          while (choiceKeys.length < 4) choiceKeys.push(normalizeKeyName(String(choiceKeys.length + 1)));
+
+          const numTrialsRaw = Number(o.num_trials);
+          const numTrials = Number.isFinite(numTrialsRaw) ? Math.max(0, Math.min(5000, Math.floor(numTrialsRaw))) : 24;
+
+          const responseWindowMs = clamp(o.response_window_ms, 200, 20000);
+          const itiMs = clamp(o.iti_ms ?? o.trial_interval_ms, 0, 20000);
+          const feedbackMs = clamp(o.feedback_ms, 0, 5000);
+          const showFeedback = (o.show_feedback !== undefined) ? !!o.show_feedback : true;
+
+          const streakRaw = Number(o.rule_change_correct_streak ?? o.rule_change_after_correct ?? 8);
+          const correctStreakToChange = Number.isFinite(streakRaw) ? Math.max(1, Math.min(50, Math.floor(streakRaw))) : 8;
+
+          const rulesRaw = (o.rule_sequence ?? o.rules ?? 'sender_domain,subject_tone,link_style,attachment_type').toString();
+          const rules = rulesRaw
+            .split(/[\n,]+/g)
+            .map(s => s.trim().toLowerCase())
+            .filter(Boolean)
+            .map((r) => {
+              if (r === 'sender' || r === 'sender_domain' || r === 'domain') return 'sender_domain';
+              if (r === 'subject' || r === 'subject_tone' || r === 'tone') return 'subject_tone';
+              if (r === 'link' || r === 'link_style') return 'link_style';
+              if (r === 'attachment' || r === 'attachment_type') return 'attachment_type';
+              return r;
+            })
+            .filter(r => r === 'sender_domain' || r === 'subject_tone' || r === 'link_style' || r === 'attachment_type');
+
+          const uniqueRules = Array.from(new Set(rules));
+          const finalRules = uniqueRules.length ? uniqueRules : ['sender_domain', 'subject_tone', 'link_style', 'attachment_type'];
+
+          let minRun = Number(o.min_run_ms);
+          let maxRun = Number(o.max_run_ms);
+          minRun = Number.isFinite(minRun) ? Math.max(0, Math.floor(minRun)) : 0;
+          maxRun = Number.isFinite(maxRun) ? Math.max(0, Math.floor(maxRun)) : 0;
+          if (minRun > 0 && maxRun > 0 && maxRun < minRun) {
+            const tmp = minRun;
+            minRun = maxRun;
+            maxRun = tmp;
+          }
+
+          const defaultDomains = ['corp.test', 'vendor.test', 'typo.test', 'ip.test'];
+          const senderDomains = coerceFour(o.sender_domains ?? o.sender_domain_examples ?? o.domains, defaultDomains);
+          const senderNames = coerceFour(o.sender_display_names ?? o.sender_names, ['Operations', 'IT Vendor', 'Support Desk', 'Automated Notice']);
+
+          const subjectNeutral = parseLines(o.subject_lines_neutral) || [];
+          const subjectUrgent = parseLines(o.subject_lines_urgent) || [];
+          const subjectReward = parseLines(o.subject_lines_reward) || [];
+          const subjectThreat = parseLines(o.subject_lines_threat) || [];
+
+          const previewNeutral = parseLines(o.preview_lines_neutral) || [];
+          const previewUrgent = parseLines(o.preview_lines_urgent) || [];
+          const previewReward = parseLines(o.preview_lines_reward) || [];
+          const previewThreat = parseLines(o.preview_lines_threat) || [];
+
+          const linkTextVisible = (o.link_text_visible ?? 'portal.corp.test').toString();
+          const linkTextShort = (o.link_text_shortened ?? 'short.test/abc').toString();
+          const linkTextMismatch = (o.link_text_mismatch ?? 'portal.corp.test').toString();
+
+          const linkHrefVisible = (o.link_href_visible ?? 'https://portal.corp.test/').toString();
+          const linkHrefShort = (o.link_href_shortened ?? 'https://short.test/abc').toString();
+          const linkHrefMismatch = (o.link_href_mismatch ?? 'https://vendor.test/portal').toString();
+
+          const attachmentPdf = (o.attachment_label_pdf ?? 'report.pdf').toString();
+          const attachmentDocm = (o.attachment_label_docm ?? 'invoice.docm').toString();
+          const attachmentZip = (o.attachment_label_zip ?? 'archive.zip').toString();
+
+          const helpEnabled = (o.help_overlay_enabled !== undefined) ? !!o.help_overlay_enabled : true;
+          const helpTitle = (o.help_overlay_title ?? 'Quick help').toString();
+          const helpHtml = (o.help_overlay_html ?? '').toString();
+
+          return {
+            response_device: responseDevice,
+            mouse_response_mode: mouseMode,
+            choice_keys: choiceKeys,
+            num_trials: numTrials,
+            response_window_ms: responseWindowMs || 2500,
+            iti_ms: itiMs || 300,
+            show_feedback: showFeedback,
+            feedback_ms: feedbackMs || 450,
+            rule_change_correct_streak: correctStreakToChange,
+            rules: finalRules,
+            min_run_ms: minRun,
+            max_run_ms: maxRun,
+
+            sender_domains: senderDomains,
+            sender_display_names: senderNames,
+            subject_lines: {
+              neutral: (subjectNeutral && subjectNeutral.length) ? subjectNeutral : ['Weekly account summary'],
+              urgent: (subjectUrgent && subjectUrgent.length) ? subjectUrgent : ['Action required: verify your account'],
+              reward: (subjectReward && subjectReward.length) ? subjectReward : ['You have a new benefit available'],
+              threat: (subjectThreat && subjectThreat.length) ? subjectThreat : ['Account will be restricted soon']
+            },
+            preview_lines: {
+              neutral: (previewNeutral && previewNeutral.length) ? previewNeutral : ['No action needed. Review recent activity.'],
+              urgent: (previewUrgent && previewUrgent.length) ? previewUrgent : ['Please verify your account details to avoid interruption.'],
+              reward: (previewReward && previewReward.length) ? previewReward : ['A new item is available. Review details when convenient.'],
+              threat: (previewThreat && previewThreat.length) ? previewThreat : ['Failure to act may result in restricted access.']
+            },
+            link_text: {
+              visible: linkTextVisible,
+              shortened: linkTextShort,
+              mismatch: linkTextMismatch
+            },
+            link_href: {
+              visible: linkHrefVisible,
+              shortened: linkHrefShort,
+              mismatch: linkHrefMismatch
+            },
+            attachment_labels: {
+              pdf: attachmentPdf,
+              docm: attachmentDocm,
+              zip: attachmentZip
+            },
+            help_overlay_enabled: helpEnabled,
+            help_overlay_title: helpTitle,
+            help_overlay_html: helpHtml
+          };
+        };
+
+        const cfg = coerceWcstLikeConfig(wSpec.subtask || {});
+
+        const state = {
+          idx: i,
+          title: wSpec.subtask_title,
+          cfg,
+          ended: false,
+          started: false,
+          subtask_start_ts: null,
+          presented: 0,
+          responded: 0,
+          correct: 0,
+          incorrect: 0,
+          omissions: 0,
+          current_rule: cfg.rules[0] || 'sender_domain',
+          rule_index: 0,
+          correct_streak: 0,
+          trial_index: 0,
+          current: null,
+          current_presented_at: null,
+          current_deadline_at: null,
+          current_responded: false,
+          respond: null
+        };
+
+        wcstStates[i] = state;
+
+        const tSubtaskMs = () => {
+          const base = (state.subtask_start_ts ?? startTs);
+          return Math.round(nowMs() - base);
+        };
+
+        const dimLabels = {
+          sender_domain: 'Sender',
+          subject_tone: 'Subject',
+          link_style: 'Link',
+          attachment_type: 'Attachment'
+        };
+
+        // Safe, non-usable pseudo-stimuli:
+        // - Reserved TLDs (.test)
+        // - Generic labels
+        // - No real brands
+        const values = {
+          sender_domain: Array.isArray(cfg.sender_domains) ? cfg.sender_domains.slice(0, 4) : ['corp.test', 'vendor.test', 'typo.test', 'ip.test'],
+          subject_tone: ['neutral', 'urgent', 'reward', 'threat'],
+          link_style: ['none', 'visible', 'shortened', 'mismatch'],
+          attachment_type: ['none', 'pdf', 'docm', 'zip']
+        };
+
+        const targets = [
+          { id: 'A', sender_domain: values.sender_domain[0], subject_tone: values.subject_tone[0], link_style: values.link_style[0], attachment_type: values.attachment_type[0] },
+          { id: 'B', sender_domain: values.sender_domain[1], subject_tone: values.subject_tone[1], link_style: values.link_style[1], attachment_type: values.attachment_type[1] },
+          { id: 'C', sender_domain: values.sender_domain[2], subject_tone: values.subject_tone[2], link_style: values.link_style[2], attachment_type: values.attachment_type[2] },
+          { id: 'D', sender_domain: values.sender_domain[3], subject_tone: values.subject_tone[3], link_style: values.link_style[3], attachment_type: values.attachment_type[3] }
+        ];
+
+        const makeStimulus = () => {
+          const pickV = (arr) => arr[randomInt(0, arr.length - 1)];
+          const senderDomain = pickV(values.sender_domain);
+          const subjectTone = pickV(values.subject_tone);
+          const linkStyle = pickV(values.link_style);
+          const attachmentType = pickV(values.attachment_type);
+
+          const domainIndex = Math.max(0, values.sender_domain.indexOf(senderDomain));
+          const senderName = (Array.isArray(cfg.sender_display_names) && cfg.sender_display_names[domainIndex])
+            ? cfg.sender_display_names[domainIndex]
+            : ((senderDomain === values.sender_domain[0]) ? 'Operations'
+              : (senderDomain === values.sender_domain[1]) ? 'IT Vendor'
+                : (senderDomain === values.sender_domain[2]) ? 'Support Desk'
+                  : 'Automated Notice');
+          const senderAddr = `alerts@${senderDomain}`;
+
+          const subjectPool = (cfg.subject_lines && cfg.subject_lines[subjectTone]) ? cfg.subject_lines[subjectTone] : null;
+          const subject = (Array.isArray(subjectPool) && subjectPool.length)
+            ? subjectPool[randomInt(0, subjectPool.length - 1)]
+            : (subjectTone === 'neutral')
+              ? 'Weekly account summary'
+              : (subjectTone === 'urgent')
+                ? 'Action required: verify your account'
+                : (subjectTone === 'reward')
+                  ? 'You have a new benefit available'
+                  : 'Account will be restricted soon';
+
+          const attachmentLabel = (attachmentType === 'none')
+            ? null
+            : (attachmentType === 'pdf')
+              ? (cfg.attachment_labels?.pdf ?? 'report.pdf')
+              : (attachmentType === 'docm')
+                ? (cfg.attachment_labels?.docm ?? 'invoice.docm')
+                : (cfg.attachment_labels?.zip ?? 'archive.zip');
+
+          const linkText = (linkStyle === 'none')
+            ? null
+            : (linkStyle === 'visible')
+              ? (cfg.link_text?.visible ?? 'portal.corp.test')
+              : (linkStyle === 'shortened')
+                ? (cfg.link_text?.shortened ?? 'short.test/abc')
+                : (cfg.link_text?.mismatch ?? 'portal.corp.test');
+          const linkHref = (linkStyle === 'none')
+            ? null
+            : (linkStyle === 'visible')
+              ? (cfg.link_href?.visible ?? 'https://portal.corp.test/')
+              : (linkStyle === 'shortened')
+                ? (cfg.link_href?.shortened ?? 'https://short.test/abc')
+                : (cfg.link_href?.mismatch ?? 'https://vendor.test/portal');
+
+          const previewPool = (cfg.preview_lines && cfg.preview_lines[subjectTone]) ? cfg.preview_lines[subjectTone] : null;
+          const preview = (Array.isArray(previewPool) && previewPool.length)
+            ? previewPool[randomInt(0, previewPool.length - 1)]
+            : (subjectTone === 'neutral')
+              ? 'No action needed. Review recent activity.'
+              : (subjectTone === 'urgent')
+                ? 'Please verify your account details to avoid interruption.'
+                : (subjectTone === 'reward')
+                  ? 'A new item is available. Review details when convenient.'
+                  : 'Failure to act may result in restricted access.';
+
+          return {
+            id: `MAIL-${i + 1}-${String(state.trial_index + 1).padStart(4, '0')}`,
+            sender_name: senderName,
+            sender_address: senderAddr,
+            subject,
+            preview,
+            sender_domain: senderDomain,
+            subject_tone: subjectTone,
+            link_style: linkStyle,
+            link_text: linkText,
+            link_href: linkHref,
+            attachment_type: attachmentType,
+            attachment_label: attachmentLabel
+          };
+        };
+
+        const correctTargetIndexForRule = (stim, rule) => {
+          const v = stim ? stim[rule] : null;
+          if (!v) return null;
+          const idx = targets.findIndex(t => (t && t[rule] === v));
+          return (idx >= 0) ? idx : null;
+        };
+
+        const humanRule = () => dimLabels[state.current_rule] || state.current_rule;
+
+        const keyLabel = (k) => {
+          if (k === ' ') return 'SPACE';
+          return String(k || '').toUpperCase();
+        };
+
+        const targetLabelForIndex = (idx) => {
+          if (cfg.response_device === 'keyboard') {
+            return keyLabel(cfg.choice_keys[idx]);
+          }
+          // Default to A-D style when using mouse
+          const t = targets[idx];
+          return (t && t.id) ? String(t.id) : String(idx + 1);
+        };
+
+        const controlsHint = () => {
+          if (cfg.response_device === 'mouse') {
+            return (cfg.mouse_response_mode === 'drag')
+              ? 'Drag the email onto a target card to sort.'
+              : 'Click a target card to sort.';
+          }
+          return `Press ${keyLabel(cfg.choice_keys[0])}, ${keyLabel(cfg.choice_keys[1])}, ${keyLabel(cfg.choice_keys[2])}, ${keyLabel(cfg.choice_keys[3])} to choose the target cards.`;
+        };
+
+        const instructionsTitle = subtaskInstructionsTitle || 'Email sorting (WCST-like)';
+        const resolvedInstructionsHtml = substitutePlaceholders(subtaskInstructions, {
+          KEYS: `${keyLabel(cfg.choice_keys[0])}, ${keyLabel(cfg.choice_keys[1])}, ${keyLabel(cfg.choice_keys[2])}, ${keyLabel(cfg.choice_keys[3])}`,
+          CONTROLS: controlsHint(),
+          RULES: cfg.rules.map(r => dimLabels[r] || r).join(', '),
+          DOMAINS: values.sender_domain.join(', ')
+        });
+
+        const defaultHelpHtml = `
+          <p><b>Goal:</b> Sort each email into one of four targets.</p>
+          <p><b>How to respond:</b> {{CONTROLS}}</p>
+          <p><b>How to decide:</b> each target card shows a <i>prototype</i> (Sender/Subject/Link/Attachment values). The correct target is the one that matches the email on the <i>current rule dimension</i>.</p>
+          <p><b>How feedback works:</b> after each sort you’ll see Correct/Incorrect. Use this to infer the current rule; the rule can change.</p>
+          <p><b>What the domains mean:</b> these are example sender domains used as stimulus attributes (not real destinations): <b>{{DOMAINS}}</b>.</p>
+          <p><b>Possible rules:</b> {{RULES}}</p>
+        `;
+
+        const helpEnabled = !!cfg.help_overlay_enabled;
+        const helpTitle = (cfg.help_overlay_title || 'Quick help').toString();
+        const helpHtmlRaw = (cfg.help_overlay_html || '').toString().trim() ? cfg.help_overlay_html : defaultHelpHtml;
+        const resolvedHelpHtml = substitutePlaceholders(helpHtmlRaw, {
+          KEYS: `${keyLabel(cfg.choice_keys[0])}, ${keyLabel(cfg.choice_keys[1])}, ${keyLabel(cfg.choice_keys[2])}, ${keyLabel(cfg.choice_keys[3])}`,
+          CONTROLS: controlsHint(),
+          RULES: cfg.rules.map(r => dimLabels[r] || r).join(', '),
+          DOMAINS: values.sender_domain.join(', ')
+        });
+
+        host.innerHTML = `
+          <div class="soc-wcst-header">
+            <div>
+              <h4 style="margin:0;">Email sorting (WCST-like)</h4>
+              <div class="hint">Sort each email into one of four target cards. Feedback helps you infer the current rule.</div>
+            </div>
+            <div class="actions">
+              ${helpEnabled ? `<button type="button" class="soc-wcst-help-btn" id="soc_wcst_help_btn_${i}">Help</button>` : ''}
+              <div class="hint" id="soc_wcst_status_${i}">Ready</div>
+            </div>
+          </div>
+
+          <div class="soc-wcst-shell" style="margin-top: 10px;">
+            <div class="soc-wcst-stim" id="soc_wcst_stim_${i}">
+              <div class="soc-wcst-email muted">Waiting…</div>
+            </div>
+
+            <div class="soc-wcst-targets" id="soc_wcst_targets_${i}"></div>
+            <div class="soc-wcst-footer muted" id="soc_wcst_footer_${i}">${escHtml(controlsHint())}</div>
+          </div>
+
+          <div class="soc-wcst-help-overlay" id="soc_wcst_help_${i}">
+            <div class="panel" role="button" tabindex="0" aria-label="WCST-like help">
+              <h3>${escHtml(helpTitle)}</h3>
+              <div class="body" data-soc-wcst-help-body="true"></div>
+              <div class="hint">Click to close.</div>
+            </div>
+          </div>
+        `;
+
+        const statusEl = host.querySelector(`#soc_wcst_status_${i}`);
+        const stimHost = host.querySelector(`#soc_wcst_stim_${i}`);
+        const targetsHost = host.querySelector(`#soc_wcst_targets_${i}`);
+        const footerEl = host.querySelector(`#soc_wcst_footer_${i}`);
+
+        const helpOverlay = host.querySelector(`#soc_wcst_help_${i}`);
+        const helpBtn = host.querySelector(`#soc_wcst_help_btn_${i}`);
+        const helpBody = helpOverlay?.querySelector?.('[data-soc-wcst-help-body="true"]') || null;
+        if (helpBody) helpBody.innerHTML = resolvedHelpHtml;
+
+        const showHelp = () => {
+          if (!helpOverlay) return;
+          try { helpOverlay.classList.add('show'); } catch { /* ignore */ }
+        };
+        const hideHelp = () => {
+          if (!helpOverlay) return;
+          try { helpOverlay.classList.remove('show'); } catch { /* ignore */ }
+        };
+
+        if (helpBtn) {
+          helpBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showHelp();
+          });
+        }
+        if (helpOverlay) {
+          helpOverlay.addEventListener('click', (e) => {
+            e.preventDefault();
+            hideHelp();
+          });
+          helpOverlay.addEventListener('keydown', (e) => {
+            const k = normalizeKeyName(e.key);
+            if (k === 'Enter' || k === ' ' || k === 'Escape') {
+              e.preventDefault();
+              hideHelp();
+            }
+          });
+        }
+
+        // Drag-to-sort: ensure dragstart sets transfer data so drops are allowed.
+        if (stimHost && cfg.response_device === 'mouse' && cfg.mouse_response_mode === 'drag') {
+          stimHost.addEventListener('dragstart', (e) => {
+            try {
+              e.dataTransfer && e.dataTransfer.setData('text/plain', 'soc-wcst');
+              e.dataTransfer && (e.dataTransfer.effectAllowed = 'move');
+            } catch { /* ignore */ }
+          });
+        }
+
+        const renderTargetCard = (t, idx) => {
+          const showProto = (cfg.response_device === 'keyboard');
+          const protoId = (t && t.id) ? String(t.id) : String(idx + 1);
+          return `
+            <button type="button" class="soc-wcst-target" data-idx="${idx}">
+              <div class="soc-wcst-target-top">
+                <div>
+                  <b>Target ${escHtml(targetLabelForIndex(idx))}</b>
+                  ${showProto ? ` <span class="muted" style="font-size:11px;">(prototype ${escHtml(protoId)})</span>` : ''}
+                </div>
+                <div class="muted" style="font-size:11px;">${escHtml(dimLabels.sender_domain)}: ${escHtml(t.sender_domain)}</div>
+              </div>
+              <div class="soc-wcst-kv">
+                <div class="k">${escHtml(dimLabels.subject_tone)}</div><div class="v">${escHtml(t.subject_tone)}</div>
+                <div class="k">${escHtml(dimLabels.link_style)}</div><div class="v">${escHtml(t.link_style)}</div>
+                <div class="k">${escHtml(dimLabels.attachment_type)}</div><div class="v">${escHtml(t.attachment_type)}</div>
+              </div>
+            </button>
+          `;
+        };
+
+        if (targetsHost) {
+          targetsHost.innerHTML = targets.map(renderTargetCard).join('');
+        }
+
+        const renderEmail = (stim) => {
+          if (!stimHost) return;
+          const senderLine = `${escHtml(stim.sender_name || 'Sender')} <span class="muted">&lt;${escHtml(stim.sender_address || '')}&gt;</span>`;
+          const att = stim.attachment_label ? `<span class="soc-wcst-pill">Attachment: ${escHtml(stim.attachment_label)}</span>` : '';
+          const link = stim.link_text ? `<span class="soc-wcst-pill">Link: ${escHtml(stim.link_text)}</span>` : '';
+          const dragAttr = (cfg.response_device === 'mouse' && cfg.mouse_response_mode === 'drag') ? 'draggable="true"' : '';
+          stimHost.innerHTML = `
+            <div class="soc-wcst-email" ${dragAttr}>
+              <div class="top">
+                <div class="from">${senderLine}</div>
+                <div class="muted" style="font-size: 11px;">ID: ${escHtml(stim.id || '')}</div>
+              </div>
+              <div class="subj"><b>${escHtml(stim.subject || '')}</b></div>
+              <div class="prev muted">${escHtml(stim.preview || '')}</div>
+              <div class="meta">${att}${link}</div>
+            </div>
+          `;
+        };
+
+        const clearTargetHighlights = () => {
+          if (!targetsHost) return;
+          targetsHost.querySelectorAll('.soc-wcst-target').forEach((el) => {
+            try { el.classList.remove('correct', 'incorrect', 'selected'); } catch { /* ignore */ }
+          });
+        };
+
+        const flashFeedback = (idx, correct) => {
+          if (!cfg.show_feedback) return;
+          if (!targetsHost) return;
+          const btn = targetsHost.querySelector(`.soc-wcst-target[data-idx="${idx}"]`);
+          if (btn) {
+            try { btn.classList.add('selected'); } catch { /* ignore */ }
+            try { btn.classList.add(correct ? 'correct' : 'incorrect'); } catch { /* ignore */ }
+          }
+          if (statusEl) statusEl.textContent = correct ? 'Correct' : 'Incorrect';
+        };
+
+        const scheduleNextTrial = () => {
+          if (state.ended || ended) return;
+          if (cfg.num_trials > 0 && state.trial_index >= cfg.num_trials) {
+            state.ended = true;
+            if (statusEl) statusEl.textContent = 'Complete';
+            return;
+          }
+          setSafeTimeout(() => {
+            if (state.ended || ended) return;
+            presentTrial();
+          }, Math.max(0, cfg.iti_ms));
+        };
+
+        const maybeChangeRule = () => {
+          if (state.correct_streak < cfg.rule_change_correct_streak) return;
+          const prev = state.current_rule;
+          state.correct_streak = 0;
+          state.rule_index = (state.rule_index + 1) % cfg.rules.length;
+          state.current_rule = cfg.rules[state.rule_index] || prev;
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'wcst_rule_change',
+            subtask_index: i,
+            subtask_title: state.title,
+            prev_rule: prev,
+            next_rule: state.current_rule
+          });
+        };
+
+        const closeTrialAsOmissionIfNeeded = (reason = 'timeout') => {
+          if (!state.current) return;
+          if (state.current_responded) return;
+
+          const now = nowMs();
+          state.omissions += 1;
+          state.presented += 1;
+          state.trial_index += 1;
+
+          events.push({
+            t_ms: Math.round(now - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'wcst_omission',
+            reason,
+            subtask_index: i,
+            subtask_title: state.title,
+            trial_index: state.trial_index - 1,
+            stimulus_id: state.current.id || null,
+            rule: state.current_rule,
+            prompt_t_ms: state.current_presented_at ? Math.round(state.current_presented_at - startTs) : null,
+            deadline_t_ms: state.current_deadline_at ? Math.round(state.current_deadline_at - startTs) : null
+          });
+
+          state.current = null;
+          state.current_presented_at = null;
+          state.current_deadline_at = null;
+          state.current_responded = false;
+          clearTargetHighlights();
+          scheduleNextTrial();
+        };
+
+        const presentTrial = () => {
+          clearTargetHighlights();
+          const stim = makeStimulus();
+          state.current = stim;
+          state.current_presented_at = nowMs();
+          state.current_deadline_at = state.current_presented_at + cfg.response_window_ms;
+          state.current_responded = false;
+
+          renderEmail(stim);
+          if (statusEl) statusEl.textContent = `Rule: ${escHtml(humanRule())}`;
+          if (footerEl) footerEl.textContent = controlsHint();
+
+          const correctIdx = correctTargetIndexForRule(stim, state.current_rule);
+
+          events.push({
+            t_ms: Math.round(state.current_presented_at - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'wcst_present',
+            subtask_index: i,
+            subtask_title: state.title,
+            trial_index: state.trial_index,
+            stimulus_id: stim.id || null,
+            rule: state.current_rule,
+            correct_target_index: Number.isFinite(correctIdx) ? correctIdx : null,
+            sender_domain: stim.sender_domain,
+            subject_tone: stim.subject_tone,
+            link_style: stim.link_style,
+            attachment_type: stim.attachment_type,
+            prompt_t_ms: Math.round(state.current_presented_at - startTs),
+            deadline_t_ms: Math.round(state.current_deadline_at - startTs)
+          });
+
+          // Timeout -> omission
+          setSafeTimeout(() => {
+            if (state.ended || ended) return;
+            // Self-healing: if trial still open after deadline, close as omission.
+            const now = nowMs();
+            if (state.current && !state.current_responded && Number.isFinite(state.current_deadline_at) && now >= state.current_deadline_at) {
+              closeTrialAsOmissionIfNeeded('deadline');
+            }
+          }, cfg.response_window_ms + 30);
+        };
+
+        const respond = (choiceIdx, device, keyOrNull) => {
+          if (state.ended || ended) return false;
+          if (!state.current) return false;
+          if (state.current_responded) return false;
+
+          const stim = state.current;
+          const now = nowMs();
+          const correctIdx = correctTargetIndexForRule(stim, state.current_rule);
+          const correct = (Number.isFinite(correctIdx) && choiceIdx === correctIdx);
+
+          state.current_responded = true;
+          state.responded += 1;
+          state.presented += 1;
+          state.trial_index += 1;
+
+          if (correct) {
+            state.correct += 1;
+            state.correct_streak += 1;
+          } else {
+            state.incorrect += 1;
+            state.correct_streak = 0;
+          }
+
+          const rt = state.current_presented_at ? Math.max(0, Math.round(now - state.current_presented_at)) : null;
+
+          events.push({
+            t_ms: Math.round(now - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'wcst_response',
+            subtask_index: i,
+            subtask_title: state.title,
+            trial_index: state.trial_index - 1,
+            stimulus_id: stim.id || null,
+            rule: state.current_rule,
+            device: device || null,
+            response_key: keyOrNull || null,
+            choice_target_index: choiceIdx,
+            correct_target_index: Number.isFinite(correctIdx) ? correctIdx : null,
+            correct,
+            accuracy: correct ? 1 : 0,
+            rt_ms: rt,
+            prompt_t_ms: state.current_presented_at ? Math.round(state.current_presented_at - startTs) : null,
+            deadline_t_ms: state.current_deadline_at ? Math.round(state.current_deadline_at - startTs) : null,
+            response_t_ms: Math.round(now - startTs),
+            sender_domain: stim.sender_domain,
+            subject_tone: stim.subject_tone,
+            link_style: stim.link_style,
+            attachment_type: stim.attachment_type
+          });
+
+          flashFeedback(choiceIdx, correct);
+
+          // Potential rule change after feedback
+          maybeChangeRule();
+
+          // Close & next
+          setSafeTimeout(() => {
+            clearTargetHighlights();
+            state.current = null;
+            state.current_presented_at = null;
+            state.current_deadline_at = null;
+            state.current_responded = false;
+            if (!state.ended) {
+              if (statusEl) statusEl.textContent = `Rule: ${escHtml(humanRule())}`;
+              scheduleNextTrial();
+            }
+          }, cfg.show_feedback ? Math.max(0, cfg.feedback_ms) : 0);
+
+          return true;
+        };
+
+        state.respond = respond;
+
+        // Mouse responses
+        if (targetsHost) {
+          targetsHost.addEventListener('click', (e) => {
+            if (cfg.response_device !== 'mouse') return;
+            if (cfg.mouse_response_mode === 'drag') return;
+            const btn = e.target.closest('.soc-wcst-target');
+            if (!btn) return;
+            const idxStr = btn.dataset.idx;
+            const idxNum = Number(idxStr);
+            if (!Number.isFinite(idxNum)) return;
+            respond(idxNum, 'mouse', null);
+          });
+
+          // Drag-to-sort mode (desktop): drop the email onto a target.
+          if (cfg.response_device === 'mouse' && cfg.mouse_response_mode === 'drag') {
+            targetsHost.addEventListener('dragover', (e) => {
+              const btn = e.target.closest('.soc-wcst-target');
+              if (!btn) return;
+              e.preventDefault();
+            });
+            targetsHost.addEventListener('drop', (e) => {
+              const btn = e.target.closest('.soc-wcst-target');
+              if (!btn) return;
+              e.preventDefault();
+              const idxStr = btn.dataset.idx;
+              const idxNum = Number(idxStr);
+              if (!Number.isFinite(idxNum)) return;
+              respond(idxNum, 'mouse', null);
+            });
+          }
+        }
+
+        // Start/stop
+        const computeStopAt = () => {
+          const minR = cfg.min_run_ms;
+          const maxR = cfg.max_run_ms;
+          if (!minR && !maxR) return Infinity;
+          if (minR && !maxR) return minR;
+          if (!minR && maxR) return maxR;
+          return randomInt(minR, maxR);
+        };
+
+        let startWall = null;
+        let stopAt = null;
+
+        const startWcstSubtask = () => {
+          if (state.ended || state.started) return;
+          state.started = true;
+          state.subtask_start_ts = nowMs();
+          startWall = state.subtask_start_ts;
+          stopAt = computeStopAt();
+
+          events.push({
+            t_ms: Math.round(state.subtask_start_ts - startTs),
+            t_subtask_ms: 0,
+            type: 'wcst_subtask_start',
+            subtask_index: i,
+            subtask_title: state.title,
+            response_device: cfg.response_device,
+            mouse_response_mode: cfg.mouse_response_mode,
+            choice_keys: cfg.choice_keys,
+            rules: cfg.rules,
+            rule_change_correct_streak: cfg.rule_change_correct_streak,
+            num_trials: cfg.num_trials,
+            sender_domains: cfg.sender_domains
+          });
+
+          // Kick off first trial
+          scheduleNextTrial();
+
+          // Show the help overlay once at start (briefly), if enabled.
+          if (helpEnabled) {
+            showHelp();
+            setSafeTimeout(() => {
+              if (state.ended || ended) return;
+              hideHelp();
+            }, 1800);
+          }
+
+          // Optional max runtime
+          if (Number.isFinite(stopAt) && stopAt !== Infinity) {
+            setSafeTimeout(() => {
+              if (state.ended || ended) return;
+              state.ended = true;
+              closeTrialAsOmissionIfNeeded('forced_end');
+              if (statusEl) statusEl.textContent = 'Complete';
+              events.push({
+                t_ms: Math.round(nowMs() - startTs),
+                t_subtask_ms: tSubtaskMs(),
+                type: 'wcst_subtask_forced_end',
+                reason: 'max_run',
+                subtask_index: i,
+                subtask_title: state.title,
+                presented: state.presented,
+                responded: state.responded,
+                correct: state.correct,
+                incorrect: state.incorrect,
+                omissions: state.omissions
+              });
+            }, stopAt);
+          }
+        };
+
+        subtaskAutoStart[i] = startWcstSubtask;
+        subtaskForceEnd[i] = (reason) => {
+          if (state.ended) return;
+          state.ended = true;
+          closeTrialAsOmissionIfNeeded('forced_end');
+          if (statusEl) statusEl.textContent = 'Complete';
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'wcst_subtask_forced_end',
+            reason: (reason ?? 'forced').toString(),
+            subtask_index: i,
+            subtask_title: state.title,
+            presented: state.presented,
+            responded: state.responded,
+            correct: state.correct,
+            incorrect: state.incorrect,
+            omissions: state.omissions
+          });
+        };
+
+        // Mount overlays on the full window so they can sit above the titlebar.
+        windowInstructionsHost[i] = w;
+        windowInstructionsTitle[i] = instructionsTitle;
+        windowInstructionsHtml[i] = resolvedInstructionsHtml;
+        maybeInstallWindowInstructions(i);
+        continue;
+      }
+
+      if (!isSartLike && !isNbackLike && !isFlankerLike && !isWcstLike) {
         host.innerHTML = `
           <h4>Subtask window</h4>
           <div class="muted">Desktop icon clicks are distractors.${wSpec.subtask_type ? ` • Subtask: ${escHtml(wSpec.subtask_type)}` : ''}</div>
@@ -693,12 +1532,637 @@
         subtaskAutoStart[i] = startGeneric;
         subtaskForceEnd[i] = () => { /* no-op */ };
 
-        windowInstructionsHost[i] = host;
+        // Mount overlays on the full window so they can sit above the titlebar.
+        windowInstructionsHost[i] = w;
         windowInstructionsTitle[i] = wSpec.subtask_title;
         windowInstructionsHtml[i] = subtaskInstructions;
         maybeInstallWindowInstructions(i);
         continue;
       }
+
+        if (isFlankerLike) {
+          const clamp01 = (x) => {
+            const n = Number(x);
+            if (!Number.isFinite(n)) return 0;
+            return Math.max(0, Math.min(1, n));
+          };
+
+          const pickLevel = (pHigh, pMed, pLow) => {
+            const a = Math.max(0, Number(pHigh) || 0);
+            const b = Math.max(0, Number(pMed) || 0);
+            const c = Math.max(0, Number(pLow) || 0);
+            const sum = a + b + c;
+            if (!(sum > 0)) return 1;
+            const r = Math.random() * sum;
+            if (r < a) return 2;
+            if (r < a + b) return 1;
+            return 0;
+          };
+
+          const coerceFlankerLikeConfig = (raw) => {
+            const o = (raw && typeof raw === 'object') ? raw : {};
+
+            const allowKey = normalizeKeyName(o.allow_key ?? 'f');
+            const rejectKey = normalizeKeyName(o.reject_key ?? 'j');
+            const rejectRule = ((o.reject_rule ?? 'high_only').toString().trim().toLowerCase() === 'medium_or_high')
+              ? 'medium_or_high'
+              : 'high_only';
+
+            const trialIntervalMs = clamp(o.trial_interval_ms, 300, 10000);
+            const numTrialsRaw = Number(o.num_trials);
+            const numTrials = Number.isFinite(numTrialsRaw) ? Math.max(0, Math.min(5000, Math.floor(numTrialsRaw))) : 0;
+            const responseWindowMs = clamp(o.response_window_ms, 150, 10000);
+            const flashMs = clamp(o.question_flash_ms, 80, 5000);
+
+            const congruentP = clamp01(o.congruent_probability ?? 0.5);
+            const pHigh = clamp01(o.center_high_probability ?? 0.34);
+            const pMed = clamp01(o.center_medium_probability ?? 0.33);
+            const pLow = clamp01(o.center_low_probability ?? 0.33);
+
+            const speedPxPerS = Math.max(40, Math.min(1200, Number(o.scroll_speed_px_per_s) || 240));
+            const jerk = clamp01(o.jerkiness ?? 0.35);
+            const spacingPx = clamp(o.point_spacing_px, 4, 24);
+
+            let minRun = Number(o.min_run_ms);
+            let maxRun = Number(o.max_run_ms);
+            minRun = Number.isFinite(minRun) ? Math.max(0, Math.floor(minRun)) : 0;
+            maxRun = Number.isFinite(maxRun) ? Math.max(0, Math.floor(maxRun)) : 0;
+            if (minRun > 0 && maxRun > 0 && maxRun < minRun) {
+              const tmp = minRun;
+              minRun = maxRun;
+              maxRun = tmp;
+            }
+
+            const showFeedback = (o.show_feedback !== undefined) ? !!o.show_feedback : false;
+
+            return {
+              allow_key: allowKey,
+              reject_key: rejectKey,
+              reject_rule: rejectRule,
+              trial_interval_ms: trialIntervalMs,
+              num_trials: numTrials,
+              response_window_ms: responseWindowMs,
+              question_flash_ms: flashMs,
+              congruent_probability: congruentP,
+              center_high_probability: pHigh,
+              center_medium_probability: pMed,
+              center_low_probability: pLow,
+              scroll_speed_px_per_s: speedPxPerS,
+              jerkiness: jerk,
+              point_spacing_px: spacingPx,
+              min_run_ms: minRun,
+              max_run_ms: maxRun,
+              show_feedback: showFeedback
+            };
+          };
+
+          const cfg = coerceFlankerLikeConfig(wSpec.subtask || {});
+          const state = {
+            idx: i,
+            title: wSpec.subtask_title,
+            cfg,
+            ended: false,
+            started: false,
+            subtask_start_ts: null,
+            statusEl: null,
+            promptEl: null,
+            trialsById: null,
+            presented: 0,
+            responded: 0,
+            correct: 0,
+            incorrect: 0,
+            omissions: 0,
+            current: null,
+            current_responded: false,
+            current_prompt_ts: null,
+            last_present_ts: null,
+            min_onset_gap_ms: null,
+            last_closed_trial: null,
+            last_closed_at_ts: null,
+            late_response_grace_ms: 2000
+          };
+          flankerStates[i] = state;
+
+          const tSubtaskMs = () => {
+            const base = (state.subtask_start_ts ?? startTs);
+            return Math.round(nowMs() - base);
+          };
+
+          const resolvedAllowKey = (cfg.allow_key === ' ' ? 'SPACE' : cfg.allow_key);
+          const resolvedRejectKey = (cfg.reject_key === ' ' ? 'SPACE' : cfg.reject_key);
+
+          const instructionsTitleRaw = (wSpec?.subtask?.instructions_title ?? 'Traffic spikes monitor').toString();
+          const instructionsTitle = instructionsTitleRaw.trim() ? instructionsTitleRaw : 'Traffic spikes monitor';
+          const resolvedInstructionsHtml = substitutePlaceholders(subtaskInstructions, {
+            ALLOW_KEY: resolvedAllowKey,
+            REJECT_KEY: resolvedRejectKey
+          });
+
+          host.innerHTML = `
+            <div class="soc-nback-header">
+              <div>
+                <h4 style="margin:0;">Traffic spikes monitor</h4>
+                <div class="hint">When <b>Reject?</b> flashes, respond to the <b>center</b> spike. Ignore surrounding spikes.</div>
+              </div>
+              <div class="hint" id="soc_flanker_status_${i}">Ready</div>
+            </div>
+
+            <div class="soc-nback-card" id="soc_flanker_card_${i}" style="padding: 10px;">
+              <div style="display:flex; align-items:center; justify-content:center; height: 26px; font-weight: 750; letter-spacing: 0.2px; opacity: 0;" id="soc_flanker_prompt_${i}">Reject?</div>
+              <div style="position: relative; border-radius: 12px; overflow:hidden; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.18);">
+                <canvas id="soc_flanker_canvas_${i}" width="860" height="220" style="width: 100%; height: 200px; display:block;"></canvas>
+                <div style="position:absolute; top:0; bottom:0; left:50%; width:0; border-left: 1px dashed rgba(250,204,21,0.75);"></div>
+              </div>
+              <div class="muted" style="margin-top:10px; font-size: 12px; display:flex; justify-content: space-between; gap: 10px;">
+                <div>ALLOW: <b>${escHtml(resolvedAllowKey)}</b></div>
+                <div>REJECT: <b>${escHtml(resolvedRejectKey)}</b></div>
+                <div style="opacity:0.85;">${escHtml(cfg.reject_rule === 'medium_or_high' ? 'Reject MED/HIGH' : 'Reject HIGH')}</div>
+              </div>
+            </div>
+          `;
+
+          const statusEl = host.querySelector(`#soc_flanker_status_${i}`);
+          const promptEl = host.querySelector(`#soc_flanker_prompt_${i}`);
+          const canvas = host.querySelector(`#soc_flanker_canvas_${i}`);
+          const ctx = canvas ? canvas.getContext('2d') : null;
+
+          state.statusEl = statusEl;
+          state.promptEl = promptEl;
+
+          const N = 160;
+          const points = Array.from({ length: N }, () => ({ level: 1, trialId: null, isCenter: false }));
+          let offset = 0;
+          let lastTick = nowMs();
+          let animIntervalId = null;
+          let trialIntervalId = null;
+          let trialSeq = 0;
+          const trialsById = new Map();
+          const pendingClusters = [];
+          let insertedTrials = 0;
+          let maxTrialsToInsert = Infinity;
+          let insertionIntervalMs = cfg.trial_interval_ms;
+
+          const markerX = (canvas && Number.isFinite(canvas.width)) ? (canvas.width / 2) : 430;
+          const approxTailX = (N - 1) * cfg.point_spacing_px;
+          const travelMs = Math.max(0, Math.round(((approxTailX - markerX) / Math.max(40, cfg.scroll_speed_px_per_s)) * 1000));
+
+          state.trialsById = trialsById;
+
+          if (promptEl) {
+            // Hidden by default; only show during the response window.
+            promptEl.style.opacity = '0';
+            promptEl.style.color = '';
+            promptEl.style.animation = '';
+          }
+
+          const rememberClosedTrial = (trial, reason) => {
+            if (!trial) return;
+            const promptTs = Number.isFinite(trial.prompt_ts) ? trial.prompt_ts : null;
+            state.last_closed_trial = {
+              stimulus_id: trial.id,
+              trial_index: trial.trial_index ?? null,
+              prompt_ts: promptTs,
+              deadline_ts: (promptTs === null) ? null : (promptTs + cfg.response_window_ms),
+              center_level: trial.centerLevel,
+              flanker_level: trial.flankerLevel,
+              congruent: !!trial.congruent,
+              reject_rule: cfg.reject_rule,
+              should_reject: !!trial.isRejectCorrect,
+              closed_reason: (reason ?? 'closed').toString()
+            };
+            state.last_closed_at_ts = nowMs();
+          };
+
+          const levelToY = (lvl, height) => {
+            const base = height - 26;
+            if (lvl === 2) return base - 130;
+            if (lvl === 1) return base - 86;
+            return base - 48;
+          };
+
+          const draw = () => {
+            if (!ctx || !canvas) return;
+            const w2 = canvas.width;
+            const h2 = canvas.height;
+            ctx.clearRect(0, 0, w2, h2);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.06)';
+            ctx.fillRect(0, 0, w2, h2);
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+            ctx.lineWidth = 1;
+            for (let y = 36; y < h2; y += 36) {
+              ctx.beginPath();
+              ctx.moveTo(0, y);
+              ctx.lineTo(w2, y);
+              ctx.stroke();
+            }
+
+            // Line
+            ctx.strokeStyle = 'rgba(147,197,253,0.95)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let j = 0; j < points.length; j++) {
+              const x = (j * cfg.point_spacing_px) - offset;
+              const y = levelToY(points[j].level, h2);
+              if (j === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Spikes
+            const base = h2 - 26;
+            for (let j = 0; j < points.length; j++) {
+              const x = (j * cfg.point_spacing_px) - offset;
+              if (x < -10 || x > w2 + 10) continue;
+              const y = levelToY(points[j].level, h2);
+              const isAnyCenter = !!points[j].isCenter && !!points[j].trialId;
+              const isActiveCenter = isAnyCenter && state.current && points[j].trialId === state.current.id;
+              const isTrialSpike = !!points[j].trialId;
+
+              if (isActiveCenter) {
+                ctx.strokeStyle = 'rgba(250,204,21,0.95)';
+                ctx.lineWidth = 3;
+              } else if (isAnyCenter) {
+                // Make upcoming decision centers visible.
+                ctx.strokeStyle = 'rgba(250,204,21,0.35)';
+                ctx.lineWidth = 2;
+              } else if (isTrialSpike) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+                ctx.lineWidth = 1;
+              } else {
+                ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+                ctx.lineWidth = 1;
+              }
+              ctx.beginPath();
+              ctx.moveTo(x, base);
+              ctx.lineTo(x, y);
+              ctx.stroke();
+            }
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, base);
+            ctx.lineTo(w2, base);
+            ctx.stroke();
+          };
+
+          const computeStopAt = () => {
+            const minR = cfg.min_run_ms;
+            const maxR = cfg.max_run_ms;
+            if (!minR && !maxR) return Infinity;
+            if (minR && !maxR) return minR;
+            if (!minR && maxR) return maxR;
+            return randomInt(minR, maxR);
+          };
+
+          let startWall = null;
+          let stopAt = null;
+
+          const enqueueTrialCluster = () => {
+            const centerLevel = pickLevel(cfg.center_high_probability, cfg.center_medium_probability, cfg.center_low_probability);
+            const isCongruent = Math.random() < cfg.congruent_probability;
+            let flankerLevel = centerLevel;
+            if (!isCongruent) {
+              if (centerLevel === 2) flankerLevel = 0;
+              else if (centerLevel === 0) flankerLevel = 2;
+              else flankerLevel = (Math.random() < 0.5) ? 0 : 2;
+            }
+
+            const id = `fl_${i}_${Date.now()}_${trialSeq++}`;
+            const isRejectCorrect = (cfg.reject_rule === 'medium_or_high') ? (centerLevel >= 1) : (centerLevel === 2);
+            const trial = { id, centerLevel, flankerLevel, congruent: isCongruent, isRejectCorrect, prompt_ts: null };
+            trialsById.set(id, trial);
+
+            const cluster = [flankerLevel, flankerLevel, centerLevel, flankerLevel, flankerLevel];
+            pendingClusters.push({ trialId: id, cluster, pos: 0 });
+            return trial;
+          };
+
+          const stampClusterNearMarker = (trial, cluster, leadMs = 700) => {
+            if (!trial || !Array.isArray(cluster) || cluster.length !== 5) return;
+            // Place center slightly to the right of the marker so it reaches it soon.
+            const leadPx = Math.max(0, Math.round((Math.max(40, cfg.scroll_speed_px_per_s) * leadMs) / 1000));
+            const targetX = markerX + leadPx;
+            const centerIdx = Math.max(3, Math.min(points.length - 3, Math.round(targetX / cfg.point_spacing_px)));
+            const startIdx = centerIdx - 2;
+            for (let k = 0; k < 5; k++) {
+              const idx2 = startIdx + k;
+              if (idx2 < 0 || idx2 >= points.length) continue;
+              points[idx2].level = cluster[k];
+              points[idx2].trialId = trial.id;
+              points[idx2].isCenter = (k === 2);
+            }
+          };
+
+          const maybeStartTrial = () => {
+            if (state.current) return;
+            if (!canvas) return;
+            if (Number.isFinite(state.min_onset_gap_ms) && Number.isFinite(state.last_present_ts)) {
+              const since = Math.max(0, nowMs() - state.last_present_ts);
+              if (since < state.min_onset_gap_ms) return;
+            }
+            const midX = markerX;
+            const hitPx = Math.max(10, Math.round(cfg.point_spacing_px * 1.25));
+            for (let j = 0; j < points.length; j++) {
+              if (!points[j].isCenter || !points[j].trialId) continue;
+              const x = (j * cfg.point_spacing_px) - offset;
+              if (Math.abs(x - midX) <= hitPx) {
+                const trial = trialsById.get(points[j].trialId) || null;
+                if (!trial || trial.prompt_ts) continue;
+                trial.prompt_ts = nowMs();
+                trial.trial_index = (state.presented || 0) + 1;
+                state.current = trial;
+                state.current_responded = false;
+                state.current_prompt_ts = trial.prompt_ts;
+                state.last_present_ts = trial.prompt_ts;
+                state.presented += 1;
+
+                // Ensure keyboard responses route to this window.
+                activeWindowIndex = i;
+
+                if (statusEl) statusEl.textContent = 'Decision…';
+                if (promptEl) {
+                  promptEl.style.opacity = '1';
+                  // Show prompt (no blinking); keep visible for the response window.
+                  promptEl.style.animation = '';
+                }
+
+                events.push({
+                  t_ms: Math.round(nowMs() - startTs),
+                  t_subtask_ms: tSubtaskMs(),
+                  type: 'flanker_present',
+                  subtask_index: i,
+                  subtask_title: state.title,
+                  stimulus_id: trial.id,
+                  trial_index: trial.trial_index,
+                  prompt_t_ms: Math.round(trial.prompt_ts - startTs),
+                  prompt_t_subtask_ms: Math.round(trial.prompt_ts - (state.subtask_start_ts || startTs)),
+                  deadline_t_ms: Math.round((trial.prompt_ts + cfg.response_window_ms) - startTs),
+                  deadline_t_subtask_ms: Math.round((trial.prompt_ts + cfg.response_window_ms) - (state.subtask_start_ts || startTs)),
+                  center_level: trial.centerLevel,
+                  flanker_level: trial.flankerLevel,
+                  congruent: !!trial.congruent,
+                  reject_rule: cfg.reject_rule,
+                  should_reject: !!trial.isRejectCorrect
+                });
+
+                // (No flashing; we keep the prompt visible for the response window.)
+
+                setSafeTimeout(() => {
+                  if (ended || state.ended) return;
+                  if (!state.current || state.current.id !== trial.id) return;
+                  if (state.current_responded) return;
+                  state.omissions += 1;
+                  rememberClosedTrial(trial, 'no_response_timeout');
+                  events.push({
+                    t_ms: Math.round(nowMs() - startTs),
+                    t_subtask_ms: tSubtaskMs(),
+                    type: 'flanker_no_response',
+                    subtask_index: i,
+                    subtask_title: state.title,
+                    stimulus_id: trial.id,
+                    trial_index: trial.trial_index,
+                    prompt_t_ms: Math.round(trial.prompt_ts - startTs),
+                    prompt_t_subtask_ms: Math.round(trial.prompt_ts - (state.subtask_start_ts || startTs)),
+                    deadline_t_ms: Math.round((trial.prompt_ts + cfg.response_window_ms) - startTs),
+                    deadline_t_subtask_ms: Math.round((trial.prompt_ts + cfg.response_window_ms) - (state.subtask_start_ts || startTs)),
+                    center_level: trial.centerLevel,
+                    flanker_level: trial.flankerLevel,
+                    congruent: !!trial.congruent,
+                    reject_rule: cfg.reject_rule,
+                    should_reject: !!trial.isRejectCorrect
+                  });
+                  if (statusEl) statusEl.textContent = 'Running…';
+                  state.current = null;
+                  state.current_prompt_ts = null;
+                  if (promptEl) {
+                    promptEl.style.opacity = '0';
+                    promptEl.style.color = '';
+                    promptEl.style.animation = '';
+                  }
+                  try { trialsById.delete(trial.id); } catch { /* ignore */ }
+                }, cfg.response_window_ms);
+                return;
+              }
+            }
+          };
+
+          const expireActiveTrialIfNeeded = () => {
+            if (!state.current || !state.current.prompt_ts) return;
+            const age = Math.max(0, nowMs() - state.current.prompt_ts);
+
+            // Keep prompt visibility in sync with trial age.
+            if (promptEl) {
+              if (age < cfg.response_window_ms) {
+                promptEl.style.opacity = '1';
+                promptEl.style.animation = '';
+              } else {
+                promptEl.style.opacity = '0';
+                promptEl.style.animation = '';
+                promptEl.style.color = '';
+              }
+            }
+
+            if (age < cfg.response_window_ms) return;
+
+            // If the participant didn't respond, record omission and clear.
+            if (!state.current_responded) {
+              state.omissions += 1;
+              const trial = state.current;
+              rememberClosedTrial(trial, 'no_response_expire');
+              events.push({
+                t_ms: Math.round(nowMs() - startTs),
+                t_subtask_ms: tSubtaskMs(),
+                type: 'flanker_no_response',
+                subtask_index: i,
+                subtask_title: state.title,
+                stimulus_id: trial.id,
+                trial_index: trial.trial_index ?? null,
+                prompt_t_ms: trial.prompt_ts ? Math.round(trial.prompt_ts - startTs) : null,
+                prompt_t_subtask_ms: trial.prompt_ts ? Math.round(trial.prompt_ts - (state.subtask_start_ts || startTs)) : null,
+                deadline_t_ms: trial.prompt_ts ? Math.round((trial.prompt_ts + cfg.response_window_ms) - startTs) : null,
+                deadline_t_subtask_ms: trial.prompt_ts ? Math.round((trial.prompt_ts + cfg.response_window_ms) - (state.subtask_start_ts || startTs)) : null,
+                center_level: trial.centerLevel,
+                flanker_level: trial.flankerLevel,
+                congruent: !!trial.congruent,
+                reject_rule: cfg.reject_rule,
+                should_reject: !!trial.isRejectCorrect
+              });
+            }
+
+            try { trialsById.delete(state.current.id); } catch { /* ignore */ }
+            state.current = null;
+            state.current_prompt_ts = null;
+            state.current_responded = false;
+            if (statusEl) statusEl.textContent = 'Running…';
+          };
+
+          const advanceGraph = (dtSeconds) => {
+            const jitter = 1 + ((Math.random() * 2 - 1) * cfg.jerkiness * 0.35);
+            offset += (cfg.scroll_speed_px_per_s * jitter) * dtSeconds;
+            while (offset >= cfg.point_spacing_px) {
+              offset -= cfg.point_spacing_px;
+              points.shift();
+
+              const p = { level: pickLevel(cfg.center_high_probability, cfg.center_medium_probability, cfg.center_low_probability), trialId: null, isCenter: false };
+              const head = pendingClusters.length ? pendingClusters[0] : null;
+              if (head && head.cluster && head.pos < head.cluster.length) {
+                const k = head.pos;
+                p.level = head.cluster[k];
+                p.trialId = head.trialId;
+                p.isCenter = (k === 2);
+                head.pos += 1;
+                if (head.pos >= head.cluster.length) {
+                  pendingClusters.shift();
+                }
+              }
+              points.push(p);
+            }
+          };
+
+          const startFlankerSubtask = () => {
+            if (state.started) return;
+            state.started = true;
+            state.subtask_start_ts = nowMs();
+            startWall = state.subtask_start_ts;
+            stopAt = computeStopAt();
+
+            // If the window has a scheduled duration and num_trials is provided, distribute
+            // trial clusters across that visibility window.
+            const scheduleDuration = (schedule && schedule.has_schedule && Number.isFinite(Number(schedule.end_at_ms)))
+              ? Math.max(0, Math.floor(Number(schedule.end_at_ms) - Number(schedule.start_at_ms)))
+              : 0;
+
+            if (cfg.num_trials > 0) {
+              maxTrialsToInsert = cfg.num_trials;
+              if (scheduleDuration > 0) {
+                // Account for the time it takes a cluster injected at the tail to reach the marker.
+                const effective = Math.max(0, Math.floor(scheduleDuration - travelMs));
+                const derived = Math.floor(effective / Math.max(1, cfg.num_trials));
+                insertionIntervalMs = Math.max(250, Math.min(10000, derived || cfg.trial_interval_ms));
+              }
+            }
+
+            // Rate-limit trial onsets so we don't chew through all trials immediately.
+            state.min_onset_gap_ms = Math.max(250, Math.min(10000, insertionIntervalMs || cfg.trial_interval_ms));
+            state.last_present_ts = null;
+
+            markGenericSubtaskStart(i);
+
+            events.push({
+              t_ms: Math.round(nowMs() - startTs),
+              t_subtask_ms: 0,
+              type: 'flanker_subtask_start',
+              subtask_index: i,
+              subtask_title: state.title,
+              reject_rule: cfg.reject_rule,
+              allow_key: cfg.allow_key,
+              reject_key: cfg.reject_key
+            });
+
+            if (statusEl) statusEl.textContent = 'Running…';
+
+            // Default keyboard focus to this window once running.
+            activeWindowIndex = i;
+
+            // Seed baseline points
+            for (let j = 0; j < points.length; j++) {
+              points[j].level = pickLevel(cfg.center_high_probability, cfg.center_medium_probability, cfg.center_low_probability);
+              points[j].trialId = null;
+              points[j].isCenter = false;
+            }
+            pendingClusters.length = 0;
+            try { trialsById.clear(); } catch { /* ignore */ }
+            state.current = null;
+            state.current_prompt_ts = null;
+            if (promptEl) {
+              promptEl.style.opacity = '0';
+              promptEl.style.color = '';
+              promptEl.style.animation = '';
+            }
+            insertedTrials = 0;
+            // Prime exactly one early decision cluster near the marker so the first decision appears quickly
+            // without causing a burst of back-to-back trials at the beginning.
+            {
+              if (insertedTrials < maxTrialsToInsert) {
+                const trial = enqueueTrialCluster();
+                const cluster = pendingClusters.length ? pendingClusters[pendingClusters.length - 1]?.cluster : null;
+                if (trial && cluster) {
+                  pendingClusters.pop();
+                  stampClusterNearMarker(trial, cluster, 900);
+                }
+                insertedTrials += 1;
+              }
+            }
+
+            lastTick = nowMs();
+            animIntervalId = setInterval(() => {
+              if (ended || state.ended) return;
+              const now = nowMs();
+              const dt = Math.max(0, Math.min(0.05, (now - lastTick) / 1000));
+              lastTick = now;
+
+              advanceGraph(dt);
+              draw();
+              maybeStartTrial();
+              expireActiveTrialIfNeeded();
+
+              if (stopAt !== Infinity && startWall !== null && (now - startWall) >= stopAt) {
+                try { subtaskForceEnd[i]?.('scheduled_end'); } catch { /* ignore */ }
+              }
+            }, 16);
+            scheduledIntervals.push(animIntervalId);
+
+            trialIntervalId = setInterval(() => {
+              if (ended || state.ended) return;
+              if (insertedTrials >= maxTrialsToInsert) return;
+              enqueueTrialCluster();
+              insertedTrials += 1;
+            }, insertionIntervalMs);
+            scheduledIntervals.push(trialIntervalId);
+          };
+
+          subtaskAutoStart[i] = startFlankerSubtask;
+          subtaskForceEnd[i] = (reason) => {
+            if (state.ended) return;
+            state.ended = true;
+            if (statusEl) statusEl.textContent = 'Complete';
+            try {
+              state.current = null;
+              state.current_prompt_ts = null;
+              if (promptEl) {
+                promptEl.style.opacity = '0';
+                promptEl.style.color = '';
+                promptEl.style.animation = '';
+              }
+              if (ctx && canvas) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+              }
+            } catch { /* ignore */ }
+            events.push({
+              t_ms: Math.round(nowMs() - startTs),
+              t_subtask_ms: tSubtaskMs(),
+              type: 'flanker_subtask_forced_end',
+              reason: (reason ?? 'forced').toString(),
+              subtask_index: i,
+              subtask_title: state.title,
+              presented: state.presented,
+              responded: state.responded,
+              correct: state.correct,
+              incorrect: state.incorrect,
+              omissions: state.omissions
+            });
+          };
+
+          // Mount overlays on the full window so they can sit above the titlebar.
+          windowInstructionsHost[i] = w;
+          windowInstructionsTitle[i] = instructionsTitle;
+          windowInstructionsHtml[i] = resolvedInstructionsHtml;
+          maybeInstallWindowInstructions(i);
+          continue;
+        }
 
       if (isNbackLike) {
         const coerceNbackLikeConfig = (raw) => {
@@ -1085,7 +2549,8 @@
           });
         };
 
-        windowInstructionsHost[i] = host;
+        // Mount overlays on the full window so they can sit above the titlebar.
+        windowInstructionsHost[i] = w;
         windowInstructionsTitle[i] = instructionsTitle;
         windowInstructionsHtml[i] = resolvedInstructionsHtml;
         maybeInstallWindowInstructions(i);
@@ -1458,7 +2923,8 @@
 
       renderRows();
 
-      windowInstructionsHost[i] = host;
+      // Mount overlays on the full window so they can sit above the titlebar.
+      windowInstructionsHost[i] = w;
       windowInstructionsTitle[i] = instructionsTitle;
       windowInstructionsHtml[i] = resolvedInstructionsHtml;
       maybeInstallWindowInstructions(i);
@@ -1495,7 +2961,7 @@
     const onKeyDown = (e) => {
       ensureActiveWindowVisible();
       const k = normalizeKeyName(e.key);
-      events.push({ t_ms: Math.round(nowMs() - startTs), type: 'key', key: k });
+      let consumed = false;
       if (k === normalizeKeyName(endKey)) {
         e.preventDefault();
         endTrial('end_key');
@@ -1508,6 +2974,7 @@
         const goKey = normalizeKeyName(st.cfg.go_key);
         if (goKey && k === goKey) {
           e.preventDefault();
+          consumed = true;
           const latest = st.entries.length ? st.entries[st.entries.length - 1] : null;
           if (latest) {
             // Inline response logic to avoid cross-closure lookups.
@@ -1559,6 +3026,7 @@
           const gk = normalizeKeyName(nb.cfg.go_key);
           if (gk && k === gk) {
             e.preventDefault();
+            consumed = true;
             try { nb.respond?.('match', 'keyboard', k); } catch { /* ignore */ }
           }
         } else {
@@ -1566,12 +3034,209 @@
           const nk = normalizeKeyName(nb.cfg.nonmatch_key);
           if (mk && k === mk) {
             e.preventDefault();
+            consumed = true;
             try { nb.respond?.('match', 'keyboard', k); } catch { /* ignore */ }
           } else if (nk && k === nk) {
             e.preventDefault();
+            consumed = true;
             try { nb.respond?.('nonmatch', 'keyboard', k); } catch { /* ignore */ }
           }
         }
+      }
+
+      // WCST-like: apply keyboard response to the active window (if configured for keyboard)
+      const wc = wcstStates[activeWindowIndex];
+      if (wc && wc.started && !wc.ended && wc.cfg && wc.cfg.response_device === 'keyboard') {
+        const keys = Array.isArray(wc.cfg.choice_keys) ? wc.cfg.choice_keys.map(normalizeKeyName) : [];
+        const idx = keys.findIndex(x => x && k === x);
+        if (idx >= 0) {
+          e.preventDefault();
+          consumed = true;
+          try { wc.respond?.(idx, 'keyboard', k); } catch { /* ignore */ }
+        }
+      }
+
+      // Flanker-like: apply keyboard response to the active window (keyboard-only)
+      const fl = flankerStates[activeWindowIndex];
+      if (fl && fl.started && !fl.ended && fl.cfg) {
+        const ak = normalizeKeyName(fl.cfg.allow_key);
+        const rk = normalizeKeyName(fl.cfg.reject_key);
+        const isAllow = ak && k === ak;
+        const isReject = rk && k === rk;
+
+        // Normal in-window response
+        if (fl.current && fl.current_prompt_ts && !fl.current_responded && (isAllow || isReject)) {
+          consumed = true;
+        }
+
+        if (fl.current && fl.current_prompt_ts && !fl.current_responded && isAllow) {
+          e.preventDefault();
+          fl.current_responded = true;
+          fl.responded += 1;
+
+          const choseReject = false;
+          const correct = (choseReject === !!fl.current.isRejectCorrect);
+          if (correct) fl.correct += 1;
+          else fl.incorrect += 1;
+
+          const responseTs = nowMs();
+          const promptTs = Number.isFinite(fl.current_prompt_ts) ? fl.current_prompt_ts : null;
+          const rt = (promptTs === null) ? null : Math.max(0, Math.round(responseTs - promptTs));
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'flanker_response',
+            subtask_index: activeWindowIndex,
+            subtask_title: fl.title,
+            stimulus_id: fl.current.id,
+            trial_index: fl.current.trial_index ?? null,
+            response: 'allow',
+            response_key: k,
+            correct,
+            accuracy: correct ? 1 : 0,
+            rt_ms: rt,
+            prompt_t_ms: (promptTs === null) ? null : Math.round(promptTs - startTs),
+            prompt_t_subtask_ms: (promptTs === null) ? null : Math.round(promptTs - (fl.subtask_start_ts || startTs)),
+            response_t_ms: Math.round(responseTs - startTs),
+            response_t_subtask_ms: Math.round(responseTs - (fl.subtask_start_ts || startTs)),
+            deadline_t_ms: (promptTs === null) ? null : Math.round((promptTs + fl.cfg.response_window_ms) - startTs),
+            deadline_t_subtask_ms: (promptTs === null) ? null : Math.round((promptTs + fl.cfg.response_window_ms) - (fl.subtask_start_ts || startTs)),
+            center_level: fl.current.centerLevel,
+            flanker_level: fl.current.flankerLevel,
+            congruent: !!fl.current.congruent
+          });
+
+          try {
+            if (fl.cfg.show_feedback) {
+              const w = windowEls[activeWindowIndex];
+              const statusEl = w?.querySelector?.(`#soc_flanker_status_${activeWindowIndex}`);
+              if (statusEl) statusEl.textContent = correct ? 'Correct' : 'Incorrect';
+            }
+          } catch {
+            // ignore
+          }
+
+          try {
+            fl.promptEl && (fl.promptEl.style.opacity = '0');
+            fl.promptEl && (fl.promptEl.style.color = '');
+            fl.promptEl && (fl.promptEl.style.animation = '');
+          } catch { /* ignore */ }
+
+          try { fl.trialsById?.delete?.(fl.current.id); } catch { /* ignore */ }
+          fl.current = null;
+          fl.current_prompt_ts = null;
+        } else if (fl.current && fl.current_prompt_ts && !fl.current_responded && isReject) {
+          e.preventDefault();
+          fl.current_responded = true;
+          fl.responded += 1;
+
+          const choseReject = true;
+          const correct = (choseReject === !!fl.current.isRejectCorrect);
+          if (correct) fl.correct += 1;
+          else fl.incorrect += 1;
+
+          const responseTs = nowMs();
+          const promptTs = Number.isFinite(fl.current_prompt_ts) ? fl.current_prompt_ts : null;
+          const rt = (promptTs === null) ? null : Math.max(0, Math.round(responseTs - promptTs));
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'flanker_response',
+            subtask_index: activeWindowIndex,
+            subtask_title: fl.title,
+            stimulus_id: fl.current.id,
+            trial_index: fl.current.trial_index ?? null,
+            response: 'reject',
+            response_key: k,
+            correct,
+            accuracy: correct ? 1 : 0,
+            rt_ms: rt,
+            prompt_t_ms: (promptTs === null) ? null : Math.round(promptTs - startTs),
+            prompt_t_subtask_ms: (promptTs === null) ? null : Math.round(promptTs - (fl.subtask_start_ts || startTs)),
+            response_t_ms: Math.round(responseTs - startTs),
+            response_t_subtask_ms: Math.round(responseTs - (fl.subtask_start_ts || startTs)),
+            deadline_t_ms: (promptTs === null) ? null : Math.round((promptTs + fl.cfg.response_window_ms) - startTs),
+            deadline_t_subtask_ms: (promptTs === null) ? null : Math.round((promptTs + fl.cfg.response_window_ms) - (fl.subtask_start_ts || startTs)),
+            center_level: fl.current.centerLevel,
+            flanker_level: fl.current.flankerLevel,
+            congruent: !!fl.current.congruent
+          });
+
+          try {
+            if (fl.cfg.show_feedback) {
+              const w = windowEls[activeWindowIndex];
+              const statusEl = w?.querySelector?.(`#soc_flanker_status_${activeWindowIndex}`);
+              if (statusEl) statusEl.textContent = correct ? 'Correct' : 'Incorrect';
+            }
+          } catch {
+            // ignore
+          }
+
+          try {
+            fl.promptEl && (fl.promptEl.style.opacity = '0');
+            fl.promptEl && (fl.promptEl.style.color = '');
+            fl.promptEl && (fl.promptEl.style.animation = '');
+          } catch { /* ignore */ }
+
+          try { fl.trialsById?.delete?.(fl.current.id); } catch { /* ignore */ }
+          fl.current = null;
+          fl.current_prompt_ts = null;
+        } else if (!fl.current && (isAllow || isReject) && fl.last_closed_trial && Number.isFinite(fl.last_closed_at_ts)) {
+          // Late keypress: attach to the most recent flanker trial if it just ended.
+          const now = nowMs();
+          const sinceClosed = Math.max(0, now - fl.last_closed_at_ts);
+          if (sinceClosed <= Math.max(0, Number(fl.late_response_grace_ms) || 0)) {
+            e.preventDefault();
+            consumed = true;
+
+            const choseReject = !!isReject;
+            const shouldReject = !!fl.last_closed_trial.should_reject;
+            const correct = (choseReject === shouldReject);
+
+            const promptTs = Number.isFinite(fl.last_closed_trial.prompt_ts) ? fl.last_closed_trial.prompt_ts : null;
+            const deadlineTs = Number.isFinite(fl.last_closed_trial.deadline_ts) ? fl.last_closed_trial.deadline_ts : null;
+
+            const rt = (promptTs === null) ? null : Math.max(0, Math.round(now - promptTs));
+            const lateness = (deadlineTs === null) ? null : Math.round(now - deadlineTs);
+
+            events.push({
+              t_ms: Math.round(now - startTs),
+              t_subtask_ms: Math.round(now - (fl.subtask_start_ts || startTs)),
+              type: 'flanker_late_response',
+              subtask_index: activeWindowIndex,
+              subtask_title: fl.title,
+              stimulus_id: fl.last_closed_trial.stimulus_id,
+              trial_index: fl.last_closed_trial.trial_index,
+              response: choseReject ? 'reject' : 'allow',
+              response_key: k,
+              correct,
+              accuracy: correct ? 1 : 0,
+              rt_ms: rt,
+              lateness_ms: lateness,
+              prompt_t_ms: (promptTs === null) ? null : Math.round(promptTs - startTs),
+              prompt_t_subtask_ms: (promptTs === null) ? null : Math.round(promptTs - (fl.subtask_start_ts || startTs)),
+              response_t_ms: Math.round(now - startTs),
+              response_t_subtask_ms: Math.round(now - (fl.subtask_start_ts || startTs)),
+              deadline_t_ms: (deadlineTs === null) ? null : Math.round(deadlineTs - startTs),
+              deadline_t_subtask_ms: (deadlineTs === null) ? null : Math.round(deadlineTs - (fl.subtask_start_ts || startTs)),
+              center_level: fl.last_closed_trial.center_level,
+              flanker_level: fl.last_closed_trial.flanker_level,
+              congruent: !!fl.last_closed_trial.congruent,
+              reject_rule: fl.last_closed_trial.reject_rule,
+              should_reject: shouldReject,
+              closed_reason: fl.last_closed_trial.closed_reason
+            });
+
+            // Prevent multiple late keys from attaching to the same closed trial.
+            fl.last_closed_trial = null;
+            fl.last_closed_at_ts = null;
+          }
+        }
+      }
+
+      // Only log raw key events for keys that weren't consumed by a task.
+      if (!consumed) {
+        events.push({ t_ms: Math.round(nowMs() - startTs), type: 'key', key: k });
       }
     };
 
@@ -1600,6 +3265,72 @@
         ended_reason: reason,
         active_app: 'tasks',
         events,
+        subtasks_summary: {
+          flanker_like: flankerStates
+            .map((st, idx) => {
+              if (!st) return null;
+              const rts = events
+                .filter((ev) => ev && ev.type === 'flanker_response' && ev.subtask_index === idx)
+                .map((ev) => ev.rt_ms)
+                .filter((v) => Number.isFinite(v));
+
+              const meanRt = rts.length ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : null;
+              const presented = Number(st.presented || 0);
+              const responded = Number(st.responded || 0);
+              const correct = Number(st.correct || 0);
+              const incorrect = Number(st.incorrect || 0);
+              const omissions = Number(st.omissions || 0);
+              const accuracy = presented > 0 ? (correct / presented) : null;
+
+              return {
+                subtask_index: idx,
+                subtask_title: st.title ?? null,
+                started: !!st.started,
+                ended: !!st.ended,
+                presented,
+                responded,
+                correct,
+                incorrect,
+                omissions,
+                accuracy,
+                mean_rt_ms: meanRt
+              };
+            })
+            .filter(Boolean),
+          wcst_like: wcstStates
+            .map((st, idx) => {
+              if (!st) return null;
+              const rts = events
+                .filter((ev) => ev && ev.type === 'wcst_response' && ev.subtask_index === idx)
+                .map((ev) => ev.rt_ms)
+                .filter((v) => Number.isFinite(v));
+
+              const meanRt = rts.length ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : null;
+              const presented = Number(st.presented || 0);
+              const responded = Number(st.responded || 0);
+              const correct = Number(st.correct || 0);
+              const incorrect = Number(st.incorrect || 0);
+              const omissions = Number(st.omissions || 0);
+              const accuracy = presented > 0 ? (correct / presented) : null;
+
+              return {
+                subtask_index: idx,
+                subtask_title: st.title ?? null,
+                started: !!st.started,
+                ended: !!st.ended,
+                presented,
+                responded,
+                correct,
+                incorrect,
+                omissions,
+                accuracy,
+                mean_rt_ms: meanRt,
+                rule: st.current_rule ?? null,
+                rule_index: Number.isFinite(st.rule_index) ? st.rule_index : null
+              };
+            })
+            .filter(Boolean)
+        },
         plugin_version: info.version
       });
     };

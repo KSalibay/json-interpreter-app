@@ -55,6 +55,12 @@
       low_value_color: { type: PT.STRING, default: '#0066ff' },
       neutral_value_color: { type: PT.STRING, default: '#666666' },
 
+      // Patch border (circle around stimulus/mask + placeholders)
+      patch_border_enabled: { type: PT.BOOL, default: true },
+      patch_border_width_px: { type: PT.INT, default: 2 },
+      patch_border_color: { type: PT.STRING, default: '#ffffff' },
+      patch_border_opacity: { type: PT.FLOAT, default: 0.22 },
+
       detection_response_task_enabled: { type: PT.BOOL, default: false }
     },
     data: {
@@ -100,6 +106,58 @@
     const x = Number(n);
     if (!Number.isFinite(x)) return lo;
     return Math.max(lo, Math.min(hi, x));
+  }
+
+  function getVisualAnglePxPerDeg() {
+    try {
+      const v = window.__psy_visual_angle;
+      const pxPerDeg = v && Number.isFinite(Number(v.px_per_deg)) ? Number(v.px_per_deg) : null;
+      return (pxPerDeg && pxPerDeg > 0) ? pxPerDeg : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function degToPx(deg) {
+    const d = Number(deg);
+    if (!Number.isFinite(d) || d <= 0) return null;
+    const pxPerDeg = getVisualAnglePxPerDeg();
+    if (!pxPerDeg) return null;
+    return d * pxPerDeg;
+  }
+
+  function parseRgbLikeColor(color) {
+    const s = (color || '').toString().trim();
+    // rgb(r,g,b) or rgba(r,g,b,a)
+    const m = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([0-9.]+)\s*)?\)\s*$/i.exec(s);
+    if (!m) return null;
+    const r = clamp(Number(m[1]), 0, 255);
+    const g = clamp(Number(m[2]), 0, 255);
+    const b = clamp(Number(m[3]), 0, 255);
+    return { r, g, b };
+  }
+
+  function parseHexColor(color) {
+    const s = (color || '').toString().trim();
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
+    if (!m) return null;
+    const hex = m[1].toLowerCase();
+    if (hex.length === 3) {
+      const r = parseInt(hex[0] + hex[0], 16);
+      const g = parseInt(hex[1] + hex[1], 16);
+      const b = parseInt(hex[2] + hex[2], 16);
+      return { r, g, b };
+    }
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return { r, g, b };
+  }
+
+  function toRgba(color, alpha, fallback = { r: 255, g: 255, b: 255 }) {
+    const a = clamp(alpha, 0, 1);
+    const rgb = parseHexColor(color) || parseRgbLikeColor(color) || fallback;
+    return `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`;
   }
 
   function valueToFrameColor(value, highColor, lowColor, neutralColor) {
@@ -220,23 +278,29 @@
     return { img, r };
   }
 
-  function drawGaborPatch(ctx, centerX, centerY, sizePx, orientationDeg, { spatialFrequency, gratingWaveform } = {}) {
+  function drawGaborPatch(ctx, centerX, centerY, sizePx, orientationDeg, { spatialFrequency, gratingWaveform, patchBorder } = {}) {
     const { img, r } = makeGaborImageData(ctx, sizePx, orientationDeg, {
       freq: spatialFrequency,
       waveform: gratingWaveform
     });
     ctx.putImageData(img, Math.round(centerX - r), Math.round(centerY - r));
 
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, r - 1, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    const enabled = patchBorder?.enabled !== false;
+    const lineWidth = clamp(patchBorder?.widthPx ?? 2, 0, 50);
+    const opacity = clamp(patchBorder?.opacity ?? 0.22, 0, 1);
+    const color = (patchBorder?.color ?? '#ffffff').toString();
+    if (enabled && lineWidth > 0 && opacity > 0) {
+      ctx.save();
+      ctx.strokeStyle = toRgba(color, opacity);
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, r - 1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
-  function drawNoiseMask(ctx, centerX, centerY, sizePx) {
+  function drawNoiseMask(ctx, centerX, centerY, sizePx, { patchBorder } = {}) {
     const w = Math.max(8, Math.floor(sizePx));
     const h = w;
     const r = Math.floor(w / 2);
@@ -266,17 +330,24 @@
 
     ctx.putImageData(img, Math.round(centerX - r), Math.round(centerY - r));
 
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, r - 1, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    const enabled = patchBorder?.enabled !== false;
+    const lineWidth = clamp(patchBorder?.widthPx ?? 2, 0, 50);
+    const opacity = clamp(patchBorder?.opacity ?? 0.18, 0, 1);
+    const color = (patchBorder?.color ?? '#ffffff').toString();
+    if (enabled && lineWidth > 0 && opacity > 0) {
+      ctx.save();
+      ctx.strokeStyle = toRgba(color, opacity);
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, r - 1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function renderGaborScene(canvas, {
     phase,
+    patchDiameterPx,
     spatialCue,
     leftFrameColor,
     rightFrameColor,
@@ -284,6 +355,7 @@
     rightAngle,
     spatialFrequency,
     gratingWaveform,
+    patchBorder,
     showCue,
     showStimulus,
     showMask
@@ -301,7 +373,13 @@
     // Responsive layout
     const pad = 24;
     const minDim = Math.max(1, Math.min(w, h));
-    const patchSize = clamp(Math.floor(minDim * 0.34), 160, 420);
+    const defaultPatchSize = clamp(Math.floor(minDim * 0.34), 160, 420);
+    const provided = Number.isFinite(Number(patchDiameterPx)) ? Number(patchDiameterPx) : null;
+
+    // Use researcher-controlled diameter when available; clamp to keep it on-screen.
+    const patchSize = (provided && provided > 0)
+      ? clamp(Math.round(provided), 40, Math.max(60, Math.floor(minDim * 0.85)))
+      : defaultPatchSize;
     const frameSize = patchSize + Math.floor(patchSize * 0.22);
 
     // Center stimulus vertically within the canvas.
@@ -314,12 +392,18 @@
     drawRoundedRectStroke(ctx, rightCx - frameSize / 2, cy - frameSize / 2, frameSize, frameSize, 18, rightFrameColor, 7);
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 3;
+    const phEnabled = patchBorder?.enabled !== false;
+    const phLineWidth = clamp(patchBorder?.widthPx ?? 3, 0, 50);
+    const phOpacity = clamp(patchBorder?.opacity ?? 0.18, 0, 1);
+    const phColor = (patchBorder?.color ?? '#ffffff').toString();
+    ctx.strokeStyle = toRgba(phColor, phOpacity);
+    ctx.lineWidth = phLineWidth;
     ctx.beginPath();
     ctx.arc(leftCx, cy, Math.floor(patchSize / 2) - 2, 0, Math.PI * 2);
     ctx.arc(rightCx, cy, Math.floor(patchSize / 2) - 2, 0, Math.PI * 2);
-    ctx.stroke();
+    if (phEnabled && phLineWidth > 0 && phOpacity > 0) {
+      ctx.stroke();
+    }
     ctx.restore();
 
     // Cue
@@ -329,11 +413,11 @@
 
     // Stimulus / mask
     if (showStimulus) {
-      drawGaborPatch(ctx, leftCx, cy, patchSize, leftAngle, { spatialFrequency, gratingWaveform });
-      drawGaborPatch(ctx, rightCx, cy, patchSize, rightAngle, { spatialFrequency, gratingWaveform });
+      drawGaborPatch(ctx, leftCx, cy, patchSize, leftAngle, { spatialFrequency, gratingWaveform, patchBorder });
+      drawGaborPatch(ctx, rightCx, cy, patchSize, rightAngle, { spatialFrequency, gratingWaveform, patchBorder });
     } else if (showMask) {
-      drawNoiseMask(ctx, leftCx, cy, patchSize);
-      drawNoiseMask(ctx, rightCx, cy, patchSize);
+      drawNoiseMask(ctx, leftCx, cy, patchSize, { patchBorder });
+      drawNoiseMask(ctx, rightCx, cy, patchSize, { patchBorder });
     }
 
     // Fixation is shown in all phases
@@ -373,6 +457,22 @@
         ? Number(trial.spatial_frequency_cyc_per_px)
         : 0.06;
       const gratingWaveform = (trial.grating_waveform ?? 'sinusoidal').toString();
+
+      const patchBorder = {
+        enabled: (trial.patch_border_enabled !== undefined) ? !!trial.patch_border_enabled : true,
+        widthPx: clamp(trial.patch_border_width_px ?? 2, 0, 50),
+        color: (trial.patch_border_color ?? '#ffffff').toString(),
+        opacity: clamp(trial.patch_border_opacity ?? 0.22, 0, 1)
+      };
+
+      // Optional researcher-controlled patch diameter.
+      // Preferred: degrees-of-visual-angle via trial.patch_diameter_deg + prior visual-angle calibration.
+      // Fallback: pixel diameter via trial.patch_diameter_px.
+      const patchDiameterDeg = Number(trial.patch_diameter_deg);
+      const patchDiameterPxDirect = Number(trial.patch_diameter_px);
+      const patchDiameterPx = Number.isFinite(patchDiameterDeg)
+        ? degToPx(patchDiameterDeg)
+        : (Number.isFinite(patchDiameterPxDirect) ? patchDiameterPxDirect : null);
 
       const fixationMs = Math.max(0, Number(trial.fixation_ms ?? 1000) || 0);
       const placeholdersMs = Math.max(0, Number(trial.placeholders_ms ?? 400) || 0);
@@ -553,6 +653,7 @@
 
         renderGaborScene(canvas, {
           phase,
+          patchDiameterPx,
           spatialCue,
           leftFrameColor,
           rightFrameColor,
@@ -560,6 +661,7 @@
           rightAngle,
           spatialFrequency,
           gratingWaveform,
+          patchBorder,
           showCue: !!opts?.showCue,
           showStimulus: !!opts?.showStimulus,
           showMask: !!opts?.showMask

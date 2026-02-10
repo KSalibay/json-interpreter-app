@@ -82,10 +82,30 @@ Implemented subtask types:
   - `response_paradigm: "go_nogo" | "2afc"`
   - `instructions` supports placeholders: `{{GO_CONTROL}}`, `{{NOGO_CONTROL}}`, `{{N}}`, `{{MATCH_FIELD}}`.
 
-Planned / placeholders (next session):
+- `flanker-like` — traffic spikes monitor (flanker-inspired “center vs flankers” decision)
+  - Keys:
+    - `allow_key` (default `f`)
+    - `reject_key` (default `j`)
+  - Timing:
+    - `response_window_ms` (window where a response is accepted)
+    - `trial_interval_ms` (cadence)
+    - `num_trials` (optional; if provided with a scheduled duration, trials are distributed across the run)
+  - Logic:
+    - `reject_rule: "high_only" | "medium_or_high"`
+    - The “Reject?” prompt is only visible during the response window and self-heals if a render bug would otherwise leave it stuck on screen.
+  - Logging: responses are integrated into trial events (with RT/correctness), and late responses can be attached to the most recent just-ended trial.
 
-- `flanker-like` (TBD)
-- `wcst-like` (TBD)
+- `wcst-like` — phishing-style email sorting (WCST-inspired rule discovery + shifts)
+  - Response mode:
+    - `response_device: "keyboard" | "mouse"`
+    - Keyboard: `choice_keys` (4 keys for targets; default `1,2,3,4`)
+    - Mouse: `mouse_response_mode: "click" | "drag"`
+  - Participant support:
+    - Optional in-window help overlay: `help_overlay_enabled`, `help_overlay_title`, `help_overlay_html`
+  - Researcher-provided example libraries (optional):
+    - Sender identity: `sender_domains`, `sender_display_names`
+    - Email text: `subject_lines_neutral|urgent|reward|threat`, `preview_lines_neutral|urgent|reward|threat`
+    - Link/attachment labels: `link_text_*`, `link_href_*`, `attachment_label_pdf|docm|zip`
 
 ### Scheduling (automatic window show/hide)
 
@@ -106,6 +126,8 @@ SOC Dashboard data is written into the trial’s `events` array. Key event types
 - Window lifecycle: `subtask_window_show`, `subtask_window_hide`
 - SART-like: `sart_subtask_start`, `sart_present`, `sart_response`, `sart_miss`, `sart_subtask_end`
 - N-back-like: `nback_subtask_start`, `nback_present`, `nback_response`, `nback_no_response`, `nback_subtask_end`
+- Flanker-like: `flanker_subtask_start`, `flanker_present`, `flanker_response`, `flanker_no_response`, `flanker_late_response`, `flanker_subtask_forced_end`
+- WCST-like: `wcst_subtask_start`, `wcst_present`, `wcst_response`, `wcst_omission`, `wcst_rule_change`, `wcst_subtask_forced_end`
 
 ## JATOS
 

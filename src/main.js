@@ -5,6 +5,40 @@
     jspsychTarget: document.getElementById('jspsych-target')
   };
 
+  function getUiThemeFromConfig(config) {
+    try {
+      const t = config && config.ui_settings && typeof config.ui_settings === 'object' ? config.ui_settings.theme : null;
+      const v = (t === null || t === undefined) ? '' : String(t).trim().toLowerCase();
+      return v === 'light' ? 'light' : 'dark';
+    } catch {
+      return 'dark';
+    }
+  }
+
+  function applyUiTheme(theme) {
+    const t = (theme || '').toString().trim().toLowerCase() === 'light' ? 'light' : 'dark';
+    try {
+      document.documentElement.setAttribute('data-psy-theme', t);
+    } catch {
+      // ignore
+    }
+  }
+
+  function wrapPsyScreenHtml(stimulusHtml, promptHtml) {
+    const stim = (stimulusHtml === null || stimulusHtml === undefined) ? '' : String(stimulusHtml);
+    const prm = (promptHtml === null || promptHtml === undefined) ? '' : String(promptHtml);
+    return `
+      <div class="psy-wrap">
+        <div class="psy-stage">
+          <div class="psy-text">
+            ${stim}
+            ${prm ? `<div class="psy-prompt">${prm}</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function getDebugMode() {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -521,24 +555,25 @@
         ? 'If your browser blocked automatic downloads, use the button below to download again.'
         : 'Tip: add <code>&debug=1</code> to auto-download data at the end.';
 
-      host.innerHTML = `
-        <div style="max-width: 900px; margin: 0 auto; padding: 28px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;">
-          <h2 style="margin: 0 0 10px 0;">Experiment finished</h2>
-          <div style="opacity: 0.75; margin-bottom: 18px;">Config: <b>${safeId}</b></div>
+      host.innerHTML = wrapPsyScreenHtml(
+        `
+          <h2>Experiment finished</h2>
+          <div class="psy-muted" style="margin-bottom: 18px;">Config: <b>${safeId}</b></div>
 
-          <div style="border: 1px solid rgba(0,0,0,0.10); border-radius: 12px; padding: 14px 16px; background: rgba(0,0,0,0.03);">
+          <div style="border: 1px solid var(--psy-border); border-radius: 12px; padding: 14px 16px; background: var(--psy-surface);">
             <div><b>Rows:</b> ${rowCount}</div>
             <div><b>SOC trials:</b> ${socTrialCount} • <b>SOC events:</b> ${socEventCount}</div>
           </div>
 
-          <div style="margin-top: 16px; display:flex; gap: 10px; flex-wrap: wrap;">
-            <button id="dl_debug_data" style="padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: #0ea5e9; color: white; cursor: pointer;">Download data (JSON)</button>
-            <button id="run_again" style="padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: white; cursor: pointer;">Run again</button>
+          <div class="psy-btn-row">
+            <button id="dl_debug_data" class="psy-btn psy-btn-primary">Download data (JSON)</button>
+            <button id="run_again" class="psy-btn">Run again</button>
           </div>
 
           <div style="margin-top: 14px; opacity: 0.85;">${hint}</div>
-        </div>
-      `;
+        `,
+        null
+      );
 
       const dlBtn = host.querySelector('#dl_debug_data');
       if (dlBtn) {
@@ -791,16 +826,18 @@
     const trials = [];
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
-      stimulus: `<div style="max-width:900px;margin:0 auto;text-align:left;">
-        <h3>Eye tracking calibration</h3>
-        <p>You will see ${pts.length} dot(s). For each dot:</p>
-        <ol>
-          <li>Look directly at the dot.</li>
-          <li>Press <b>${escapeHtml(keyLabel)}</b> while looking at it.</li>
-        </ol>
-        <p style="opacity:0.8;">This helps WebGazer start producing gaze estimates.</p>
-        <p style="margin-top:12px;opacity:0.9;">Press <b>${escapeHtml(keyLabel)}</b> to begin calibration.</p>
-      </div>`,
+      stimulus: wrapPsyScreenHtml(
+        `
+          <h3>Eye tracking calibration</h3>
+          <p>You will see ${pts.length} dot(s). For each dot:</p>
+          <ol>
+            <li>Look directly at the dot.</li>
+            <li>Press <b>${escapeHtml(keyLabel)}</b> while looking at it.</li>
+          </ol>
+          <p class="psy-muted">This helps WebGazer start producing gaze estimates.</p>
+        `,
+        `Press <b>${escapeHtml(keyLabel)}</b> to begin calibration.`
+      ),
       choices: [key],
       data: { ...(dataStamp || {}), plugin_type: 'eye-tracking-calibration-intro' }
     });
@@ -812,12 +849,9 @@
 
       trials.push({
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: `<div style="position:relative;width:100vw;height:100vh;">
-          <div style="position:absolute;left:${(p.x * 100).toFixed(3)}%;top:${(p.y * 100).toFixed(3)}%;transform:translate(-50%,-50%);
-                      width:18px;height:18px;border-radius:50%;background:#ff3b3b;box-shadow:0 0 0 6px rgba(255,59,59,0.25);"></div>
-          <div style="position:absolute;left:0;right:0;bottom:24px;text-align:center;opacity:0.9;">
-            Point ${i + 1}/${pts.length} — Look at the dot and press <b>${escapeHtml(keyLabel)}</b>
-          </div>
+        stimulus: `<div class="psy-fullscreen">
+          <div class="psy-calibration-dot" style="left:${(p.x * 100).toFixed(3)}%;top:${(p.y * 100).toFixed(3)}%;"></div>
+          <div class="psy-bottom-hint">Point ${i + 1}/${pts.length} — Look at the dot and press <b>${escapeHtml(keyLabel)}</b></div>
         </div>`,
         choices: [key],
         data: { ...(dataStamp || {}), plugin_type: 'eye-tracking-calibration', calibration_index: i },
@@ -840,10 +874,10 @@
 
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
-      stimulus: `<div style="max-width:900px;margin:0 auto;text-align:left;">
-        <h3>Calibration complete</h3>
-        <p>Press any key to continue to the task.</p>
-      </div>`,
+      stimulus: wrapPsyScreenHtml(
+        `<h3>Calibration complete</h3><p>Calibration data recorded.</p>`,
+        'Press any key to continue to the task.'
+      ),
       choices: 'ALL_KEYS',
       data: { ...(dataStamp || {}), plugin_type: 'eye-tracking-calibration-complete' }
     });
@@ -870,6 +904,9 @@
 
   async function startExperiment(config, configId) {
     const validateMode = getValidateMode();
+
+    // Apply experiment-wide UI theme (from Builder export: ui_settings.theme)
+    applyUiTheme(getUiThemeFromConfig(config));
 
     let compiled = window.TimelineCompiler.compileToJsPsychTimeline(config);
 
@@ -907,12 +944,15 @@
         compiled.timeline = [
           {
             type: jsPsychHtmlKeyboardResponse,
-            stimulus: `<div style="max-width: 900px; margin:0 auto; text-align:left;">
-              <h3>Eye tracking enabled</h3>
-              <p>This study will request access to your camera for gaze estimation (WebGazer).</p>
-              <p>If prompted, please allow camera access, then press any key to begin.</p>
-              <p style="opacity:0.75; font-size: 0.95em;">Note: camera-based eye tracking typically requires HTTPS or localhost.</p>
-            </div>`,
+            stimulus: wrapPsyScreenHtml(
+              `
+                <h3>Eye tracking enabled</h3>
+                <p>This study will request access to your camera for gaze estimation (WebGazer).</p>
+                <p>If prompted, please allow camera access.</p>
+                <p class="psy-muted">Note: camera-based eye tracking typically requires HTTPS or localhost.</p>
+              `,
+              'Press any key to begin.'
+            ),
             choices: 'ALL_KEYS',
             data: { plugin_type: 'eye-tracking-permission' },
             on_finish: async () => {
@@ -1138,6 +1178,14 @@
     const seq = Array.isArray(configs) ? [...configs] : [];
     shuffleInPlace(seq);
 
+    // Apply UI theme from the first config that specifies it (default dark).
+    try {
+      const firstCfg = seq.map((c) => (c && c.config ? c.config : null)).find((cfg) => !!cfg) || null;
+      applyUiTheme(getUiThemeFromConfig(firstCfg));
+    } catch {
+      applyUiTheme('dark');
+    }
+
     // Optional: Eye tracking via WebGazer (enabled per-config in Builder data_collection)
     let eyeTrackingEnabledAny = false;
     let eyeTrackingStartResult = null;
@@ -1189,6 +1237,15 @@
       const cfg = c && c.config ? c.config : null;
       if (!cfg) continue;
 
+      // Allow relative asset resolution during compilation.
+      try {
+        if (c && c.sourceUrl && !cfg.__source_url) {
+          cfg.__source_url = c.sourceUrl;
+        }
+      } catch {
+        // ignore
+      }
+
       const taskType = (cfg.task_type || 'task').toString();
       const compiled = window.TimelineCompiler.compileToJsPsychTimeline(cfg);
 
@@ -1216,12 +1273,15 @@
       // Insert a short permission prompt so camera access is tied to a user gesture.
       timeline.push({
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: `<div style="max-width: 900px; margin:0 auto; text-align:left;">
-          <h3>Eye tracking enabled</h3>
-          <p>This study will request access to your camera for gaze estimation (WebGazer).</p>
-          <p>If prompted, please allow camera access, then press any key to begin.</p>
-          <p style="opacity:0.75; font-size: 0.95em;">Note: camera-based eye tracking typically requires HTTPS or localhost.</p>
-        </div>`,
+        stimulus: wrapPsyScreenHtml(
+          `
+            <h3>Eye tracking enabled</h3>
+            <p>This study will request access to your camera for gaze estimation (WebGazer).</p>
+            <p>If prompted, please allow camera access.</p>
+            <p class="psy-muted">Note: camera-based eye tracking typically requires HTTPS or localhost.</p>
+          `,
+          'Press any key to begin.'
+        ),
         choices: 'ALL_KEYS',
         data: { plugin_type: 'eye-tracking-permission', code, task_type: null, config_id: null },
         on_finish: async () => {
@@ -1265,11 +1325,13 @@
     for (const c of compiledSeq) {
       timeline.push({
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: `<div style="max-width: 900px; margin: 0 auto; text-align:left;">
-          <h3>Next task: ${escapeHtml(c.taskType)}</h3>
-          <div style="opacity:0.75">Code: ${escapeHtml(code)} • Config: ${escapeHtml(c.id || '')}</div>
-          <div style="margin-top:12px; opacity:0.9">Press any key to begin.</div>
-        </div>`,
+        stimulus: wrapPsyScreenHtml(
+          `
+            <h3>Next task: ${escapeHtml(c.taskType)}</h3>
+            <div class="psy-muted">Code: ${escapeHtml(code)} • Config: ${escapeHtml(c.id || '')}</div>
+          `,
+          'Press any key to begin.'
+        ),
         choices: 'ALL_KEYS',
         data: { plugin_type: 'task-break', code, task_type: c.taskType, config_id: c.id || null }
       });
@@ -1463,7 +1525,19 @@
       if (looksLikeCode && typeof window.ConfigLoader.loadConfigsByCode === 'function') {
         setStatus(`Loading configs for code: ${trimmed} ...`);
         window.ConfigLoader.loadConfigsByCode(trimmed, loaderOpts)
-          .then((configs) => startExperimentFromConfigs(configs, trimmed))
+          .then((configs) => {
+            // Stamp sourceUrl onto each config (used to resolve relative asset paths).
+            try {
+              for (const c of (Array.isArray(configs) ? configs : [])) {
+                if (c && c.config && c.sourceUrl) {
+                  c.config.__source_url = c.sourceUrl;
+                }
+              }
+            } catch {
+              // ignore
+            }
+            return startExperimentFromConfigs(configs, trimmed);
+          })
           .catch((e) => {
             console.error(e);
             setStatus(e && e.message ? e.message : String(e));
@@ -1473,7 +1547,16 @@
 
       setStatus(`Loading config: ${id} ...`);
       window.ConfigLoader.loadConfigById(id, loaderOpts)
-        .then(({ config, id: loadedId }) => startExperiment(config, loadedId || id))
+        .then(({ config, id: loadedId, sourceUrl }) => {
+          try {
+            if (config && sourceUrl) {
+              config.__source_url = sourceUrl;
+            }
+          } catch {
+            // ignore
+          }
+          return startExperiment(config, loadedId || id);
+        })
         .catch((e) => {
           console.error(e);
           setStatus(e && e.message ? e.message : String(e));

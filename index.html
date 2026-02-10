@@ -11,9 +11,43 @@
   <link href="https://unpkg.com/jspsych@8.2.3/css/jspsych.css" rel="stylesheet" />
 
   <style>
+    :root {
+      --psy-font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+
+      /* Default theme (dark) */
+      --psy-bg: #0b0b0b;
+      --psy-fg: rgba(255, 255, 255, 0.88);
+      --psy-fg-strong: rgba(255, 255, 255, 0.92);
+      --psy-muted: rgba(255, 255, 255, 0.75);
+      --psy-border: rgba(255, 255, 255, 0.14);
+      --psy-surface: rgba(255, 255, 255, 0.06);
+      --psy-shadow: 0 14px 50px rgba(0, 0, 0, 0.45);
+      --psy-accent: #ff3b3b;
+
+      /* Some tasks (e.g., canvas-based) may prefer a fixed dark stage */
+      --psy-task-bg: #0b0b0b;
+    }
+
+    html[data-psy-theme="light"] {
+      --psy-bg: #f7f7f8;
+      --psy-fg: rgba(17, 17, 17, 0.92);
+      --psy-fg-strong: rgba(17, 17, 17, 0.98);
+      --psy-muted: rgba(17, 17, 17, 0.70);
+      --psy-border: rgba(17, 17, 17, 0.14);
+      --psy-surface: rgba(17, 17, 17, 0.04);
+      --psy-shadow: 0 14px 50px rgba(0, 0, 0, 0.16);
+      --psy-accent: #d91c1c;
+
+      /* Keep some tasks dark by default even in light UI mode */
+      --psy-task-bg: #0b0b0b;
+    }
+
     html, body {
       height: 100%;
       margin: 0;
+      background: var(--psy-bg);
+      color: var(--psy-fg);
+      font-family: var(--psy-font-sans);
     }
 
     #jspsych-target {
@@ -35,6 +69,109 @@
       max-width: none;
     }
 
+    /* Generic centered stage for instruction-like screens */
+    .psy-wrap {
+      width: 100%;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--psy-bg);
+      color: var(--psy-fg);
+    }
+    .psy-stage {
+      width: 100%;
+      padding: clamp(18px, 3vw, 32px);
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .psy-text {
+      width: min(900px, 100%);
+      text-align: left;
+      line-height: 1.5;
+      font-size: 16px;
+    }
+    .psy-text h1, .psy-text h2, .psy-text h3 {
+      margin: 0 0 10px 0;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+      color: var(--psy-fg-strong);
+    }
+    .psy-text p {
+      margin: 0 0 10px 0;
+    }
+    .psy-prompt {
+      margin-top: 10px;
+      opacity: 0.9;
+    }
+    .psy-muted {
+      opacity: 0.78;
+    }
+    .psy-fullscreen {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: var(--psy-bg);
+      color: var(--psy-fg);
+      overflow: hidden;
+    }
+    .psy-calibration-dot {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--psy-accent);
+      box-shadow: 0 0 0 6px rgba(255, 59, 59, 0.25);
+    }
+    html[data-psy-theme="light"] .psy-calibration-dot {
+      box-shadow: 0 0 0 6px rgba(217, 28, 28, 0.20);
+    }
+    .psy-bottom-hint {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 24px;
+      text-align: center;
+      opacity: 0.9;
+    }
+    .psy-btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .psy-btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--psy-border);
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+    }
+    .psy-btn-primary {
+      background: #0ea5e9;
+      border-color: rgba(0, 0, 0, 0.0);
+      color: #fff;
+    }
+
+    @keyframes socPromptFlash {
+      0% { opacity: 1; filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+      50% { opacity: 0.25; filter: drop-shadow(0 0 10px rgba(250,204,21,0.55)); }
+      100% { opacity: 1; filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+    }
+
+    @keyframes socPromptPulse {
+      0% { opacity: 1; filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+      15% { opacity: 0.15; filter: drop-shadow(0 0 12px rgba(250,204,21,0.65)); }
+      30% { opacity: 1; filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+      45% { opacity: 0.15; filter: drop-shadow(0 0 12px rgba(250,204,21,0.65)); }
+      60% { opacity: 1; filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+      100% { opacity: 1; filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+    }
+
     /* Gabor task presentation (full-viewport, centered, dark theme) */
     .gabor-wrap {
       width: 100%;
@@ -42,7 +179,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #0b0b0b;
+      background: var(--psy-task-bg);
       color: rgba(255, 255, 255, 0.88);
     }
     .gabor-stage {
@@ -57,7 +194,7 @@
     }
     #gabor-canvas {
       display: block;
-      background: #0b0b0b;
+      background: var(--psy-task-bg);
       border-radius: 12px;
       box-shadow: 0 14px 50px rgba(0, 0, 0, 0.45);
     }
@@ -105,7 +242,8 @@
   <script src="src/jspsych-flanker.js?v=20260207"></script>
   <script src="src/jspsych-sart.js?v=20260207"></script>
   <script src="src/jspsych-gabor.js?v=20260207"></script>
-  <script src="src/jspsych-soc-dashboard.js?v=20260207"></script>
+  <script src="src/jspsych-visual-angle-calibration.js?v=20260210"></script>
+  <script src="src/jspsych-soc-dashboard.js?v=20260210d"></script>
   <script src="src/eyeTrackingWebgazer.js?v=20260207"></script>
   <script src="src/configLoader.js?v=20260207"></script>
   <script src="src/timelineCompiler.js?v=20260207"></script>

@@ -1,0 +1,63 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "ui_settings": {
+    "theme": "dark"
+  },
+  "reward_settings": {
+    "enabled": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "detection_response_task_enabled": false,
+      "stimulus": "You will see a scrolling <b>traffic spikes</b> monitor.</p>\n<p>When <b>Reject?</b> flashes, respond to the <b>center spike</b> directly underneath that question, ignoring surrounding spikes.</p>\n<p>Press <b>{{REJECT_KEY}}</b> to reject and <b>{{ALLOW_KEY}}</b> to allow.</p>\n<p><i>Press any key to begin.</i></p>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-subtask-flanker-like",
+      "title": "Flanker-like",
+      "start_at_ms": 0,
+      "duration_ms": 30000,
+      "num_trials": 20,
+      "instructions": "<p>You will see a scrolling <b>traffic spikes</b> monitor.</p>\n<p>When <b>Reject?</b> flashes, respond to the <b>center spike</b> directly underneath that question, ignoring surrounding spikes.</p>\n<p>Press <b>{{REJECT_KEY}}</b> to reject and <b>{{ALLOW_KEY}}</b> to allow.</p>",
+      "instructions_title": "Traffic spikes monitor",
+      "allow_key": "f",
+      "reject_key": "j",
+      "trial_interval_ms": 1400,
+      "response_window_ms": 900,
+      "question_flash_ms": 550,
+      "congruent_probability": 0.5,
+      "center_high_probability": 0.34,
+      "center_medium_probability": 0.33,
+      "center_low_probability": 0.33,
+      "reject_rule": "high_only",
+      "scroll_speed_px_per_s": 120,
+      "jerkiness": 0.8,
+      "point_spacing_px": 8,
+      "show_feedback": true,
+      "detection_response_task_enabled": false
+    }
+  ],
+  "frame_rate": 60,
+  "duration": 30,
+  "update_interval": 16,
+  "soc_dashboard_settings": {
+    "title": "SOC Dashboard",
+    "wallpaper_url": "",
+    "background_color": "#0b1220",
+    "default_app": "soc",
+    "num_tasks": 1,
+    "trial_duration_ms": 60000,
+    "end_key": "escape",
+    "icons_clickable": true,
+    "log_icon_clicks": true,
+    "icon_clicks_are_distractors": true
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "ui_settings": {
+    "theme": "dark"
+  },
+  "reward_settings": {
+    "enabled": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "detection_response_task_enabled": false,
+      "stimulus": "<p>This experiment consists of the <strong>SOC Dashboard</strong>. Please respond using the mouse (dashboard icons) and the keyboard (subtasks). Press any key to continue.</p>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-subtask-wcst-like",
+      "title": "WCST-like",
+      "start_at_ms": 0,
+      "duration_ms": 30000,
+      "instructions": "<p>Sort each email into one of four target cards.</p>\n<p>{{CONTROLS}}</p>\n<p><b>Possible rules</b>: {{RULES}}</p>\n<p><i>Click this popup to begin.</i></p>",
+      "instructions_title": "Email sorting",
+      "response_device": "keyboard",
+      "choice_keys": "1,2,3,4",
+      "sender_domains": "corp.test, vendor.test, typo.test, ip.test",
+      "sender_display_names": "Operations, IT Vendor, Support Desk, Automated Notice",
+      "subject_lines_neutral": "Weekly account summary",
+      "subject_lines_urgent": "Action required: verify your account",
+      "subject_lines_reward": "You have a new benefit available",
+      "subject_lines_threat": "Account will be restricted soon",
+      "preview_lines_neutral": "No action needed. Review recent activity.",
+      "preview_lines_urgent": "Please verify your account details to avoid interruption.",
+      "preview_lines_reward": "A new item is available. Review details when convenient.",
+      "preview_lines_threat": "Failure to act may result in restricted access.",
+      "link_text_visible": "portal.corp.test",
+      "link_href_visible": "https://portal.corp.test/",
+      "link_text_shortened": "short.test/abc",
+      "link_href_shortened": "https://short.test/abc",
+      "link_text_mismatch": "portal.corp.test",
+      "link_href_mismatch": "https://vendor.test/portal",
+      "attachment_label_pdf": "report.pdf",
+      "attachment_label_docm": "invoice.docm",
+      "attachment_label_zip": "archive.zip",
+      "help_overlay_enabled": true,
+      "help_overlay_title": "Quick help",
+      "help_overlay_html": "<p><b>Goal:</b> Sort each email into one of four targets.</p>\n<p><b>How to respond:</b> {{CONTROLS}}</p>\n<p><b>What the domains mean:</b> example sender domains used as stimulus attributes: <b>{{DOMAINS}}</b>.</p>\n<p><b>Possible rules:</b> {{RULES}}</p>",
+      "num_trials": 10,
+      "response_window_ms": 2500,
+      "iti_ms": 300,
+      "show_feedback": true,
+      "feedback_ms": 450,
+      "rules": "sender_domain,subject_tone,link_style,attachment_type",
+      "rule_change_correct_streak": 8,
+      "min_run_ms": 0,
+      "max_run_ms": 0,
+      "detection_response_task_enabled": false
+    }
+  ],
+  "frame_rate": 60,
+  "duration": 30,
+  "update_interval": 16,
+  "soc_dashboard_settings": {
+    "title": "SOC Dashboard",
+    "wallpaper_url": "",
+    "background_color": "#0b1220",
+    "default_app": "soc",
+    "num_tasks": 1,
+    "trial_duration_ms": 60000,
+    "end_key": "escape",
+    "icons_clickable": true,
+    "log_icon_clicks": true,
+    "icon_clicks_are_distractors": true
+  }
+}

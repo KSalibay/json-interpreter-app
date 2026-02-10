@@ -202,6 +202,19 @@
       return v;
     };
 
+    const normalizeOptions = (raw) => {
+      if (raw === undefined || raw === null) return [];
+      if (Array.isArray(raw)) return raw;
+      return [raw];
+    };
+
+    const sampleFromOptions = (opts) => {
+      const arr = Array.isArray(opts) ? opts : [];
+      if (arr.length === 0) return null;
+      const idx = Math.floor(rng() * arr.length);
+      return arr[Math.max(0, Math.min(arr.length - 1, idx))];
+    };
+
     // Adaptive / staircase support (trial-based). In continuous mode this isn't supported yet.
     let staircase = null;
     let adaptiveMeta = null;
@@ -283,6 +296,55 @@
         const s = sampleNumber(w.min, w.max);
         if (s === null) continue;
         t[k] = s;
+      }
+
+      // Gabor cue presence gating (optional): jointly sample spatial/value cue presence per trial.
+      // This is applied only when the Builder exports *enabled/probability fields*.
+      if (baseType === 'gabor-trial' || baseType === 'gabor-quest') {
+        const hasSpatialGate = (Object.prototype.hasOwnProperty.call(values, 'spatial_cue_enabled') || Object.prototype.hasOwnProperty.call(values, 'spatial_cue_probability'));
+        const hasValueGate = (Object.prototype.hasOwnProperty.call(values, 'value_cue_enabled') || Object.prototype.hasOwnProperty.call(values, 'value_cue_probability'));
+
+        if (hasSpatialGate || hasValueGate) {
+          const spatialEnabled = Object.prototype.hasOwnProperty.call(values, 'spatial_cue_enabled') ? (values.spatial_cue_enabled === true) : true;
+          const valueEnabled = Object.prototype.hasOwnProperty.call(values, 'value_cue_enabled') ? (values.value_cue_enabled === true) : true;
+
+          const pSpatial = Object.prototype.hasOwnProperty.call(values, 'spatial_cue_probability') ? clamp(values.spatial_cue_probability, 0, 1) : 1;
+          const pValue = Object.prototype.hasOwnProperty.call(values, 'value_cue_probability') ? clamp(values.value_cue_probability, 0, 1) : 1;
+
+          const spatialPresent = spatialEnabled && rng() < pSpatial;
+          const valuePresent = valueEnabled && rng() < pValue;
+
+          if (!spatialPresent) {
+            t.spatial_cue = 'none';
+          } else {
+            const opts = normalizeOptions(values.spatial_cue);
+            const filtered = opts.filter(x => (x ?? '').toString().trim().toLowerCase() !== 'none');
+            const picked = sampleFromOptions(filtered.length > 0 ? filtered : opts);
+            t.spatial_cue = picked === null ? (t.spatial_cue ?? 'none') : picked;
+          }
+
+          if (!valuePresent) {
+            t.left_value = 'neutral';
+            t.right_value = 'neutral';
+          } else {
+            const lvOpts = normalizeOptions(values.left_value);
+            const rvOpts = normalizeOptions(values.right_value);
+            const lvFiltered = lvOpts.filter(x => (x ?? '').toString().trim().toLowerCase() !== 'neutral');
+            const rvFiltered = rvOpts.filter(x => (x ?? '').toString().trim().toLowerCase() !== 'neutral');
+
+            const leftPicked = sampleFromOptions(lvFiltered.length > 0 ? lvFiltered : lvOpts);
+            const rightPicked = sampleFromOptions(rvFiltered.length > 0 ? rvFiltered : rvOpts);
+
+            if (leftPicked !== null) t.left_value = leftPicked;
+            if (rightPicked !== null) t.right_value = rightPicked;
+          }
+
+          // Don't leak gating config into per-trial parameters.
+          delete t.spatial_cue_enabled;
+          delete t.spatial_cue_probability;
+          delete t.value_cue_enabled;
+          delete t.value_cue_probability;
+        }
       }
 
       // Adaptive override for the selected parameter.
@@ -396,19 +458,58 @@
   function compileToJsPsychTimeline(config) {
     if (!isObject(config)) throw new Error('Config must be an object');
 
-    function wrapGaborScreenHtml(stimulusHtml, promptHtml) {
+    function wrapPsyScreenHtml(stimulusHtml, promptHtml) {
       const stim = (stimulusHtml === null || stimulusHtml === undefined) ? '' : String(stimulusHtml);
       const prm = (promptHtml === null || promptHtml === undefined) ? '' : String(promptHtml);
       return `
-        <div class="gabor-wrap">
-          <div class="gabor-stage">
-            <div class="gabor-text">
+        <div class="psy-wrap">
+          <div class="psy-stage">
+            <div class="psy-text">
               ${stim}
-              ${prm ? `<div class="gabor-prompt">${prm}</div>` : ''}
+              ${prm ? `<div class="psy-prompt">${prm}</div>` : ''}
             </div>
           </div>
         </div>
       `;
+    }
+
+    function wrapMaybeFunctionStimulus(stimulus, prompt) {
+      const stimIsFn = typeof stimulus === 'function';
+      const promptIsFn = typeof prompt === 'function';
+      if (!stimIsFn && !promptIsFn) {
+        const s = (stimulus === null || stimulus === undefined) ? '' : stimulus;
+        const p = (prompt === undefined ? null : prompt);
+        return wrapPsyScreenHtml(s, p);
+      }
+
+      return function () {
+        let s = stimulus;
+        let p = prompt;
+        try { if (typeof s === 'function') s = s(); } catch { /* ignore */ }
+        try { if (typeof p === 'function') p = p(); } catch { /* ignore */ }
+        const ss = (s === null || s === undefined) ? '' : s;
+        const pp = (p === undefined ? null : p);
+        return wrapPsyScreenHtml(ss, pp);
+      };
+    }
+
+    function resolveMaybeRelativeUrl(rawUrl) {
+      const u = (rawUrl === null || rawUrl === undefined) ? '' : String(rawUrl).trim();
+      if (!u) return '';
+      // asset:// refs are Builder-only; they must be rewritten at export time.
+      if (/^asset:\/\//i.test(u)) return '';
+      if (/^(https?:|data:|blob:)/i.test(u)) return u;
+
+      const src = (config && typeof config.__source_url === 'string') ? config.__source_url : '';
+      if (!src) return u;
+
+      try {
+        // src can be relative (e.g., "configs/ABC1234.json"), so first make it absolute.
+        const absSrc = new URL(src, window.location.href).toString();
+        return new URL(u, absSrc).toString();
+      } catch {
+        return u;
+      }
     }
 
     function resolvePlugin(p) {
@@ -435,7 +536,6 @@
 
     const experimentType = config.experiment_type || 'trial-based';
     const taskType = config.task_type || 'rdm';
-    const useGaborStageForInstructions = String(taskType).toLowerCase() === 'gabor';
 
     const baseRdmParams = normalizeRdmParams({
       ...(isObject(config.display_settings) ? config.display_settings : {}),
@@ -468,6 +568,146 @@
 
     const timeline = [];
 
+    // Rewards (optional): configured by a reward-settings timeline component.
+    let rewardsPolicy = null;
+    let rewardsStoreKey = '__psy_rewards';
+
+    const normBoolFromData = (v) => {
+      if (typeof v === 'boolean') return v;
+      if (typeof v === 'number') return v > 0;
+      if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        if (s === 'true' || s === '1' || s === 'yes') return true;
+        if (s === 'false' || s === '0' || s === 'no') return false;
+      }
+      return null;
+    };
+
+    const getRtMsFromData = (data) => {
+      if (!data || typeof data !== 'object') return null;
+      const a = Number(data.rt_ms);
+      if (Number.isFinite(a) && a >= 0) return a;
+      const b = Number(data.rt);
+      if (Number.isFinite(b) && b >= 0) return b;
+      return null;
+    };
+
+    const getCorrectFromData = (data) => {
+      if (!data || typeof data !== 'object') return null;
+      if (Object.prototype.hasOwnProperty.call(data, 'correctness')) return normBoolFromData(data.correctness);
+      if (Object.prototype.hasOwnProperty.call(data, 'correct')) return normBoolFromData(data.correct);
+      if (Object.prototype.hasOwnProperty.call(data, 'accuracy')) return normBoolFromData(data.accuracy);
+      return null;
+    };
+
+    const scoringBasisLabel = (basis) => {
+      const b = (basis || '').toString().trim().toLowerCase();
+      if (b === 'reaction_time') return 'Reaction time';
+      if (b === 'accuracy') return 'Accuracy';
+      if (b === 'both') return 'Accuracy + reaction time';
+      return basis || 'both';
+    };
+
+    const continueKeyLabel = (k) => {
+      const key = (k || 'space').toString();
+      if (key === ' ') return 'SPACE';
+      if (key.toLowerCase() === 'space') return 'SPACE';
+      if (key.toLowerCase() === 'enter') return 'ENTER';
+      if (key === 'ALL_KEYS') return 'ANY KEY';
+      return key.toUpperCase();
+    };
+
+    const renderTemplate = (tpl, vars) => {
+      const raw = (tpl ?? '').toString();
+      return raw.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+        const v = Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : '';
+        return (v === null || v === undefined) ? '' : String(v);
+      });
+    };
+
+    const computeRewardPoints = (event, policy) => {
+      const p = (policy && typeof policy === 'object') ? policy : {};
+      const basis = (p.scoring_basis || 'both').toString().trim().toLowerCase();
+      const rtThresh = Number(p.rt_threshold_ms);
+      const points = Number(p.points_per_success);
+
+      const rtOk = Number.isFinite(rtThresh)
+        ? (event.rt_ms !== null && event.rt_ms !== undefined && Number(event.rt_ms) <= rtThresh)
+        : true;
+
+      const correctOk = (event.correct === true);
+      const correctKnown = (event.correct === true || event.correct === false);
+      const requireCorrectForRt = p.require_correct_for_rt === true;
+
+      let success = false;
+
+      if (basis === 'accuracy') {
+        success = correctOk;
+      } else if (basis === 'reaction_time') {
+        success = rtOk && (!requireCorrectForRt || !correctKnown || correctOk);
+      } else {
+        // both
+        success = correctOk && rtOk;
+      }
+
+      if (!success) return 0;
+      return Number.isFinite(points) ? points : 0;
+    };
+
+    const recordRewardEvent = (data, pluginType) => {
+      if (!rewardsPolicy) return null;
+      const storeKey = rewardsStoreKey;
+      try {
+        const bag = window[storeKey];
+        if (!bag || bag.enabled !== true) return null;
+        const state = (bag.state && typeof bag.state === 'object') ? bag.state : (bag.state = {});
+        const events = Array.isArray(state.events) ? state.events : (state.events = []);
+
+        const evt = {
+          plugin_type: pluginType || null,
+          rt_ms: getRtMsFromData(data),
+          correct: getCorrectFromData(data)
+        };
+
+        events.push(evt);
+        state.eligible_trials = events.length;
+
+        const calcOnFly = bag.policy && bag.policy.calculate_on_the_fly === true;
+        if (calcOnFly) {
+          const pts = computeRewardPoints(evt, bag.policy);
+          state.total_points = Number.isFinite(Number(state.total_points)) ? Number(state.total_points) : 0;
+          state.rewarded_trials = Number.isFinite(Number(state.rewarded_trials)) ? Number(state.rewarded_trials) : 0;
+          state.total_points += pts;
+          if (pts > 0) state.rewarded_trials += 1;
+          evt.reward_points = pts;
+          return { pts, total: state.total_points, rewarded_trials: state.rewarded_trials, eligible_trials: state.eligible_trials };
+        }
+        return { pts: null, total: null, rewarded_trials: null, eligible_trials: state.eligible_trials };
+      } catch {
+        return null;
+      }
+    };
+
+    const maybeWrapOnFinishWithRewards = (originalOnFinish, pluginType) => {
+      if (!rewardsPolicy) return originalOnFinish;
+      return (data) => {
+        const res = recordRewardEvent(data, pluginType);
+        if (res && res.pts !== null) {
+          try {
+            data.reward_points = res.pts;
+            data.reward_total_points = res.total;
+            data.reward_rewarded_trials = res.rewarded_trials;
+            data.reward_eligible_trials = res.eligible_trials;
+          } catch {
+            // ignore
+          }
+        }
+        if (typeof originalOnFinish === 'function') {
+          try { originalOnFinish(data); } catch { /* ignore */ }
+        }
+      };
+    };
+
     // Continuous mode (RDM only): run the entire expanded sequence inside one plugin trial
     // so we don't re-render the DOM between frames.
     //
@@ -482,8 +722,40 @@
           // Keep instructions as their own trial.
           timeline.push({
             type: HtmlKeyboard,
-            stimulus: item.stimulus || '',
-            prompt: (item.prompt === undefined ? null : item.prompt),
+            stimulus: wrapMaybeFunctionStimulus(item.stimulus, item.prompt),
+            prompt: null,
+            choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
+            stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
+            trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),
+            response_ends_trial: (item.response_ends_trial === undefined ? true : item.response_ends_trial),
+            data: { plugin_type: type }
+          });
+          continue;
+        }
+
+        if (type === 'image-keyboard-response') {
+          const src = resolveMaybeRelativeUrl(item.stimulus);
+          const w = Number.isFinite(Number(item.stimulus_width)) ? Number(item.stimulus_width) : null;
+          const h = Number.isFinite(Number(item.stimulus_height)) ? Number(item.stimulus_height) : null;
+          const keep = (item.maintain_aspect_ratio !== undefined) ? (item.maintain_aspect_ratio === true) : true;
+
+          const style = [
+            'max-width:100%;',
+            'max-height:55vh;',
+            'object-fit:contain;'
+          ];
+          if (w !== null) style.push(`width:${w}px;`);
+          if (h !== null) style.push(`height:${h}px;`);
+          if (!keep) style.push('object-fit:fill;');
+
+          const stimulusHtml = src
+            ? `<div style="display:flex; justify-content:center;"><img src="${escapeHtml(src)}" alt="stimulus" style="${style.join(' ')}" /></div>`
+            : `<div class="psy-muted">(Missing image stimulus)</div>`;
+
+          timeline.push({
+            type: HtmlKeyboard,
+            stimulus: wrapMaybeFunctionStimulus(stimulusHtml, item.prompt),
+            prompt: null,
             choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
             stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
             trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),
@@ -565,8 +837,40 @@
         if (type === 'html-keyboard-response' || type === 'instructions') {
         timeline.push({
           type: HtmlKeyboard,
-          stimulus: useGaborStageForInstructions ? wrapGaborScreenHtml(item.stimulus || '', (item.prompt === undefined ? null : item.prompt)) : (item.stimulus || ''),
-          prompt: useGaborStageForInstructions ? null : (item.prompt === undefined ? null : item.prompt),
+          stimulus: wrapMaybeFunctionStimulus(item.stimulus, item.prompt),
+          prompt: null,
+          choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
+          stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
+          trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),
+          response_ends_trial: (item.response_ends_trial === undefined ? true : item.response_ends_trial),
+          data: { plugin_type: type }
+        });
+        continue;
+      }
+
+      if (type === 'image-keyboard-response') {
+        const src = resolveMaybeRelativeUrl(item.stimulus);
+        const w = Number.isFinite(Number(item.stimulus_width)) ? Number(item.stimulus_width) : null;
+        const h = Number.isFinite(Number(item.stimulus_height)) ? Number(item.stimulus_height) : null;
+        const keep = (item.maintain_aspect_ratio !== undefined) ? (item.maintain_aspect_ratio === true) : true;
+
+        const style = [
+          'max-width:100%;',
+          'max-height:55vh;',
+          'object-fit:contain;'
+        ];
+        if (w !== null) style.push(`width:${w}px;`);
+        if (h !== null) style.push(`height:${h}px;`);
+        if (!keep) style.push('object-fit:fill;');
+
+        const stimulusHtml = src
+          ? `<div style="display:flex; justify-content:center;"><img src="${escapeHtml(src)}" alt="stimulus" style="${style.join(' ')}" /></div>`
+          : `<div class="psy-muted">(Missing image stimulus)</div>`;
+
+        timeline.push({
+          type: HtmlKeyboard,
+          stimulus: wrapMaybeFunctionStimulus(stimulusHtml, item.prompt),
+          prompt: null,
           choices: item.choices === 'ALL_KEYS' ? 'ALL_KEYS' : (Array.isArray(item.choices) ? item.choices : 'ALL_KEYS'),
           stimulus_duration: (item.stimulus_duration === undefined ? null : item.stimulus_duration),
           trial_duration: (item.trial_duration === undefined ? null : item.trial_duration),
@@ -592,6 +896,97 @@
         continue;
       }
 
+      if (type === 'visual-angle-calibration') {
+        const Vac = requirePlugin('visual-angle-calibration (window.jsPsychVisualAngleCalibration)', window.jsPsychVisualAngleCalibration);
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+        timeline.push({
+          type: Vac,
+          ...itemCopy,
+          data: { plugin_type: type }
+        });
+        continue;
+      }
+
+      if (type === 'reward-settings') {
+        // Store policy globally + show participant-facing reward instructions.
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+
+        rewardsStoreKey = (itemCopy.store_key || '__psy_rewards').toString();
+        rewardsPolicy = {
+          store_key: rewardsStoreKey,
+          currency_label: (itemCopy.currency_label || 'points').toString(),
+          scoring_basis: (itemCopy.scoring_basis || 'both').toString(),
+          rt_threshold_ms: Number.isFinite(Number(itemCopy.rt_threshold_ms)) ? Number(itemCopy.rt_threshold_ms) : 600,
+          points_per_success: Number.isFinite(Number(itemCopy.points_per_success)) ? Number(itemCopy.points_per_success) : 1,
+          require_correct_for_rt: itemCopy.require_correct_for_rt === true,
+          calculate_on_the_fly: itemCopy.calculate_on_the_fly !== false,
+          show_summary_at_end: itemCopy.show_summary_at_end !== false,
+          continue_key: (itemCopy.continue_key || 'space').toString(),
+          instructions_title: (itemCopy.instructions_title || 'Rewards').toString(),
+          instructions_template_html: (itemCopy.instructions_template_html || '').toString(),
+          summary_title: (itemCopy.summary_title || 'Rewards Summary').toString(),
+          summary_template_html: (itemCopy.summary_template_html || '').toString()
+        };
+
+        const basisLabel = scoringBasisLabel(rewardsPolicy.scoring_basis);
+        const contLabel = continueKeyLabel(rewardsPolicy.continue_key);
+        const contChoices = rewardsPolicy.continue_key === 'ALL_KEYS'
+          ? 'ALL_KEYS'
+          : (rewardsPolicy.continue_key === 'enter' ? ['Enter'] : [' ']);
+
+        const vars = {
+          currency_label: rewardsPolicy.currency_label,
+          scoring_basis: rewardsPolicy.scoring_basis,
+          scoring_basis_label: basisLabel,
+          rt_threshold_ms: rewardsPolicy.rt_threshold_ms,
+          points_per_success: rewardsPolicy.points_per_success,
+          continue_key: rewardsPolicy.continue_key,
+          continue_key_label: contLabel
+        };
+
+        const body = rewardsPolicy.instructions_template_html
+          ? renderTemplate(rewardsPolicy.instructions_template_html, vars)
+          : `<p>You can earn <b>${escapeHtml(rewardsPolicy.currency_label)}</b>.</p>`;
+
+        const html = `
+          <div class="psy-wrap">
+            <div class="psy-stage">
+              <div class="psy-text">
+                <h2 style="margin:0 0 8px 0;">${escapeHtml(rewardsPolicy.instructions_title)}</h2>
+                <div>${body}</div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        timeline.push({
+          type: HtmlKeyboard,
+          stimulus: html,
+          choices: contChoices,
+          on_start: () => {
+            try {
+              window[rewardsStoreKey] = {
+                enabled: true,
+                policy: { ...rewardsPolicy },
+                state: {
+                  total_points: 0,
+                  rewarded_trials: 0,
+                  eligible_trials: 0,
+                  events: [],
+                  computed_at_end: false
+                }
+              };
+            } catch {
+              // ignore
+            }
+          },
+          data: { plugin_type: type }
+        });
+        continue;
+      }
+
       if (type === 'soc-dashboard') {
         const SocDashboard = requirePlugin('soc-dashboard (window.jsPsychSocDashboard)', window.jsPsychSocDashboard);
         const itemCopy = { ...item };
@@ -605,10 +1000,58 @@
         continue;
       }
 
+      // Builder-only helper components: allow running a single SOC subtask directly by
+      // wrapping it in a one-window SOC Dashboard session.
+      if (
+        type === 'soc-subtask-sart-like'
+        || type === 'soc-subtask-nback-like'
+        || type === 'soc-subtask-flanker-like'
+        || type === 'soc-subtask-wcst-like'
+      ) {
+        const SocDashboard = requirePlugin('soc-dashboard (window.jsPsychSocDashboard)', window.jsPsychSocDashboard);
+
+        const kind = (t) => {
+          switch (t) {
+            case 'soc-subtask-sart-like': return 'sart-like';
+            case 'soc-subtask-nback-like': return 'nback-like';
+            case 'soc-subtask-flanker-like': return 'flanker-like';
+            case 'soc-subtask-wcst-like': return 'wcst-like';
+            default: return 'unknown';
+          }
+        };
+
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+
+        const subtaskTitle = (itemCopy.title ?? itemCopy.name ?? kind(type) ?? 'Subtask').toString();
+        const startAt = Number.isFinite(Number(itemCopy.start_at_ms)) ? Number(itemCopy.start_at_ms) : 0;
+        const duration = Number.isFinite(Number(itemCopy.duration_ms)) ? Number(itemCopy.duration_ms) : null;
+        const sessionDuration = (duration !== null && duration > 0)
+          ? Math.max(1, Math.floor(startAt + duration))
+          : null;
+
+        const subtaskParams = { ...itemCopy };
+        delete subtaskParams.title;
+        delete subtaskParams.name;
+        delete subtaskParams.parameters;
+        delete subtaskParams.data;
+
+        timeline.push({
+          type: SocDashboard,
+          ...(socDefaults ? { ...socDefaults } : {}),
+          title: 'SOC Dashboard',
+          ...(sessionDuration !== null ? { trial_duration_ms: sessionDuration } : {}),
+          subtasks: [{ type: kind(type), title: subtaskTitle, ...subtaskParams }],
+          data: { plugin_type: 'soc-dashboard', task_type: 'soc-dashboard', original_type: type }
+        });
+        continue;
+      }
+
       if (typeof type === 'string' && type.startsWith('rdm-')) {
         const Rdm = requirePlugin('rdm (window.jsPsychRdm)', window.jsPsychRdm);
         const onStart = typeof item.on_start === 'function' ? item.on_start : null;
-        const onFinish = typeof item.on_finish === 'function' ? item.on_finish : null;
+        const onFinish0 = typeof item.on_finish === 'function' ? item.on_finish : null;
+        const onFinish = maybeWrapOnFinishWithRewards(onFinish0, type);
 
         const itemCopy = { ...item };
         delete itemCopy.response_parameters_override;
@@ -657,10 +1100,12 @@
       // Flanker task
       if (type === 'flanker-trial') {
         const Flanker = requirePlugin('flanker (window.jsPsychFlanker)', window.jsPsychFlanker);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
         timeline.push({
           ...item,
           type: Flanker,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
+          ...(onFinish ? { on_finish: onFinish } : {}),
           data: { plugin_type: type, task_type: 'flanker' }
         });
         continue;
@@ -669,10 +1114,12 @@
       // SART task
       if (type === 'sart-trial') {
         const Sart = requirePlugin('sart (window.jsPsychSart)', window.jsPsychSart);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
         timeline.push({
           ...item,
           type: Sart,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
+          ...(onFinish ? { on_finish: onFinish } : {}),
           data: { plugin_type: type, task_type: 'sart' }
         });
         continue;
@@ -682,7 +1129,8 @@
       if (type === 'gabor-trial') {
         const Gabor = requirePlugin('gabor (window.jsPsychGabor)', window.jsPsychGabor);
         const onStart = typeof item.on_start === 'function' ? item.on_start : null;
-        const onFinish = typeof item.on_finish === 'function' ? item.on_finish : null;
+        const onFinish0 = typeof item.on_finish === 'function' ? item.on_finish : null;
+        const onFinish = maybeWrapOnFinishWithRewards(onFinish0, type);
 
         const itemCopy = { ...item };
         delete itemCopy.type;
@@ -722,6 +1170,74 @@
         </div>`,
         choices: 'ALL_KEYS',
         data: { plugin_type: 'unsupported', original_type: type }
+      });
+    }
+
+    // Optional end-of-experiment reward summary screen.
+    if (rewardsPolicy && rewardsPolicy.show_summary_at_end === true) {
+      const storeKey = rewardsStoreKey;
+      const contChoices = rewardsPolicy.continue_key === 'ALL_KEYS'
+        ? 'ALL_KEYS'
+        : (rewardsPolicy.continue_key === 'enter' ? ['Enter'] : [' ']);
+
+      timeline.push({
+        type: HtmlKeyboard,
+        stimulus: () => {
+          try {
+            const bag = window[storeKey];
+            const policy = bag && bag.policy ? bag.policy : rewardsPolicy;
+            const state = (bag && bag.state && typeof bag.state === 'object') ? bag.state : {};
+            const events = Array.isArray(state.events) ? state.events : [];
+
+            if (policy && policy.calculate_on_the_fly !== true) {
+              // Compute totals at summary time from recorded outcomes.
+              let total = 0;
+              let rewarded = 0;
+              for (const evt of events) {
+                const pts = computeRewardPoints(evt, policy);
+                total += pts;
+                if (pts > 0) rewarded += 1;
+              }
+              state.total_points = total;
+              state.rewarded_trials = rewarded;
+              state.eligible_trials = events.length;
+              state.computed_at_end = true;
+              if (bag && bag.state) bag.state = state;
+            }
+
+            const vars = {
+              currency_label: (policy.currency_label || 'points').toString(),
+              scoring_basis: policy.scoring_basis,
+              scoring_basis_label: scoringBasisLabel(policy.scoring_basis),
+              rt_threshold_ms: Number.isFinite(Number(policy.rt_threshold_ms)) ? Number(policy.rt_threshold_ms) : 0,
+              points_per_success: Number.isFinite(Number(policy.points_per_success)) ? Number(policy.points_per_success) : 0,
+              continue_key: policy.continue_key,
+              continue_key_label: continueKeyLabel(policy.continue_key),
+              total_points: Number.isFinite(Number(state.total_points)) ? Number(state.total_points) : 0,
+              rewarded_trials: Number.isFinite(Number(state.rewarded_trials)) ? Number(state.rewarded_trials) : 0,
+              eligible_trials: Number.isFinite(Number(state.eligible_trials)) ? Number(state.eligible_trials) : events.length
+            };
+
+            const body = policy.summary_template_html
+              ? renderTemplate(policy.summary_template_html, vars)
+              : `<p><b>Total earned</b>: ${escapeHtml(String(vars.total_points))} ${escapeHtml(vars.currency_label)}</p>`;
+
+            return `
+              <div class="psy-wrap">
+                <div class="psy-stage">
+                  <div class="psy-text">
+                    <h2 style="margin:0 0 8px 0;">${escapeHtml(policy.summary_title || 'Rewards Summary')}</h2>
+                    <div>${body}</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          } catch (e) {
+            return `<div class="psy-wrap"><div class="psy-stage"><div class="psy-text"><h2>Rewards Summary</h2><p>Could not compute rewards.</p></div></div></div>`;
+          }
+        },
+        choices: contChoices,
+        data: { plugin_type: 'reward-summary' }
       });
     }
 
