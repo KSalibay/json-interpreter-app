@@ -1,0 +1,42 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "pvt",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": false,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "pvt_settings": {
+    "response_device": "both",
+    "response_key": "space",
+    "foreperiod_ms": 4000,
+    "trial_duration_ms": 10000,
+    "iti_ms": 0,
+    "feedback_enabled": true,
+    "feedback_message": "Please wait for the timer before responding.",
+    "add_trial_per_false_start": true
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 760px; margin: 0 auto; text-align:left;\"><h2>Sample PVT</h2><p>Wait for the timer to start, then respond as quickly as possible.</p><p>Respond with <b>SPACE</b> or a mouse click.</p><p><b>Note:</b> If you respond before the timer starts, it will be logged as a false start.</p><p>Press any key to begin.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "block",
+      "component_type": "pvt-trial",
+      "length": 12,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "response_device": "inherit",
+        "response_key": "inherit"
+      },
+      "parameter_windows": [
+        { "parameter": "foreperiod_ms", "min": 2000, "max": 10000 },
+        { "parameter": "trial_duration_ms", "min": 4000, "max": 12000 },
+        { "parameter": "iti_ms", "min": 0, "max": 2500 }
+      ]
+    }
+  ]
+}

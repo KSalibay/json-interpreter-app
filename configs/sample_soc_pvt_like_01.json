@@ -1,0 +1,82 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 860px; margin: 0 auto; text-align: left;\">\n  <h2>SOC Dashboard (PVT-like subtask demo)</h2>\n  <p>This config demonstrates a <b>PVT-like</b> SOC subtask: a scrolling console feed with occasional <b>countdown</b> overlays followed by a <b>red flash</b>.</p>\n  <p><b>Goal</b>: Press <code>SPACE</code> as soon as the red flash appears. Any keypress when no flash is active counts as a false start.</p>\n  <p>Run with <code>?debug=1</code> to auto-download the data JSON at the end.</p>\n  <p>Press any key to start.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-dashboard",
+      "title": "SOC Dashboard",
+      "trial_duration_ms": 18000,
+      "end_key": "escape",
+      "default_app": "soc",
+      "num_tasks": 2,
+      "icons_clickable": true,
+      "log_icon_clicks": true,
+      "icon_clicks_are_distractors": true,
+      "subtasks": [
+        {
+          "type": "pvt-like",
+          "title": "Incident alerts",
+          "start_at_ms": 0,
+          "duration_ms": 17000,
+          "instructions_title": "Incident alert monitor",
+          "instructions": "<p>This window shows a scrolling event feed.</p>\n<p>Occasionally you will see a <b>countdown</b> followed by a <b>red flash</b>.</p>\n<p>Press <b>{{RESPONSE_CONTROL}}</b> as soon as the <b>red flash</b> appears.</p>\n<p><i>Click this popup to begin.</i></p>",
+          "response_device": "keyboard",
+          "response_key": "space",
+          "visible_entries": 12,
+          "log_scroll_interval_ms": 250,
+          "alert_min_interval_ms": 1500,
+          "alert_max_interval_ms": 3500,
+          "countdown_seconds": 2,
+          "flash_duration_ms": 120,
+          "response_window_ms": 1200,
+          "show_countdown": true,
+          "show_red_flash": true
+        },
+        {
+          "type": "sart-like",
+          "title": "Login monitor",
+          "start_at_ms": 0,
+          "duration_ms": 17000,
+          "instructions_title": "Filtering harmful logins",
+          "instructions": "<p>Please press <b>{{GO_CONTROL}}</b> to filter through login attempts.</p>\n<p>Press <b>{{GO_CONTROL}}</b> to allow safe logins, and block harmful ones.</p>\n<p><b>Harmful (targets)</b>: {{TARGETS}}</p>\n<p><b>Benign (distractors)</b>: {{DISTRACTORS}}</p>\n<p><i>Click this popup to begin.</i></p>",
+          "show_markers": false,
+          "visible_entries": 8,
+          "scroll_interval_ms": 900,
+          "min_run_ms": 17000,
+          "max_run_ms": 17000,
+          "response_device": "keyboard",
+          "go_key": "space",
+          "go_condition": "target",
+          "highlight_subdomains": true,
+          "target_highlight_color": "#22c55e",
+          "distractor_highlight_color": "#ef4444",
+          "target_subdomains": [
+            "secure-login.example",
+            "admin-portal.example"
+          ],
+          "distractor_subdomains": [
+            "status.example",
+            "helpdesk.example"
+          ],
+          "neutral_subdomains": [
+            "mail.example",
+            "intranet.example"
+          ],
+          "target_probability": 0.25,
+          "distractor_probability": 0.15
+        }
+      ]
+    }
+  ]
+}

@@ -62,7 +62,13 @@ The interpreter includes a custom jsPsych plugin that renders a multi-window “
 
 - `.../index.html?id=sample_soc_sart_10s&debug=1`
 - `.../index.html?id=sample_soc_nback_10s&debug=1`
+- `.../index.html?id=sample_soc_pvt_like_01&debug=1`
 - Overlap demo (scheduled windows): `.../index.html?id=sample_soc_nback_sart_overlap&debug=1`
+
+Optional SOC debug overlay:
+
+- Add `&soc_debug=1` to show additional per-window debug text inside SOC subtasks.
+- `&debug=1` also enables SOC debug text.
 
 Note: pass the config id **without** the `.json` suffix.
 
@@ -107,6 +113,15 @@ Implemented subtask types:
     - Email text: `subject_lines_neutral|urgent|reward|threat`, `preview_lines_neutral|urgent|reward|threat`
     - Link/attachment labels: `link_text_*`, `link_href_*`, `attachment_label_pdf|docm|zip`
 
+- `pvt-like` — incident alert monitor (PVT-inspired vigilance)
+  - Goal: respond as fast as possible when the red flash appears; early responses count as false starts.
+  - Parameters:
+    - `response_device: "keyboard" | "mouse"`, `response_key`
+    - `countdown_seconds`, `flash_duration_ms`, `response_window_ms`
+    - `alert_min_interval_ms`, `alert_max_interval_ms`
+    - `show_countdown`, `show_red_flash`
+  - Data: emits trial-level events and also writes summary stats under `subtasks_summary.pvt_like`.
+
 ### Scheduling (automatic window show/hide)
 
 Each subtask can include optional timing fields to automatically show/hide the window during the SOC Dashboard trial:
@@ -128,6 +143,35 @@ SOC Dashboard data is written into the trial’s `events` array. Key event types
 - N-back-like: `nback_subtask_start`, `nback_present`, `nback_response`, `nback_no_response`, `nback_subtask_end`
 - Flanker-like: `flanker_subtask_start`, `flanker_present`, `flanker_response`, `flanker_no_response`, `flanker_late_response`, `flanker_subtask_forced_end`
 - WCST-like: `wcst_subtask_start`, `wcst_present`, `wcst_response`, `wcst_omission`, `wcst_rule_change`, `wcst_subtask_forced_end`
+- PVT-like: `pvt_like_subtask_start`, `pvt_like_alert_scheduled`, `pvt_like_countdown_start`, `pvt_like_flash_onset`, `pvt_like_response`, `pvt_like_false_start`, `pvt_like_timeout`, `pvt_like_subtask_auto_end`, `pvt_like_subtask_forced_end`
+
+## Trial-based tasks (Feb 2026)
+
+The interpreter includes additional jsPsych plugins for trial-based tasks compiled from PsychJSON Builder exports.
+
+### Included sample configs
+
+- Stroop: `.../index.html?id=sample_stroop_01&debug=1`
+- Simon: `.../index.html?id=sample_simon_01&debug=1`
+- PVT: `.../index.html?id=sample_pvt_01&debug=1`
+
+### Component types
+
+- `stroop-trial` (plugin: `src/jspsych-stroop.js`)
+- `simon-trial` (plugin: `src/jspsych-simon.js`)
+- `pvt-trial` (plugin: `src/jspsych-pvt.js`)
+
+### Experiment-wide defaults
+
+Builder exports task-specific defaults at the top level (merged into each trial when fields are missing):
+
+- `stroop_settings`
+- `simon_settings`
+- `pvt_settings`
+
+### PVT blocks and false-start compensation
+
+If `pvt_settings.add_trial_per_false_start === true` and a `block` generates `pvt-trial`, the compiler uses a jsPsych loop so the block produces the requested number of **valid** trials (false starts do not count toward the target).
 
 ## JATOS
 
@@ -182,9 +226,16 @@ Under `data_collection.eye_tracking` (object form), supported settings include:
 ## Current scope / assumptions
 
 - Supports both `experiment_type: "trial-based"` and `"continuous"`.
-- `block` components are expanded up-front and sampled **per-trial**.
+- `block` components are expanded up-front and sampled **per-trial** (with a special case for PVT blocks when `add_trial_per_false_start` is enabled; see above).
 - Adaptive/staircase blocks (e.g. QUEST) choose their next value at runtime (via `on_start`) and update after each trial (via `on_finish`).
 - Expected total scale is ~≤ 5k trials/frames.
+
+### Block parameter windows
+
+The compiler accepts either of these `parameter_windows` shapes:
+
+- Builder shape: array of objects: `{ parameter, min, max }`
+- Legacy/alternate shape: object map: `{ "coherence": {"min": 0.2, "max": 0.8}, ... }`
 
 ## Files
 
@@ -194,3 +245,6 @@ Under `data_collection.eye_tracking` (object form), supported settings include:
 - `src/timelineCompiler.js`: expand blocks + map to jsPsych timeline
 - `src/rdmEngine.js`: dot-motion renderer used by the jsPsych plugin
 - `src/jspsych-rdm.js`: custom jsPsych plugin for RDM stimuli
+- `src/jspsych-stroop.js`: jsPsych plugin for Stroop trials
+- `src/jspsych-simon.js`: jsPsych plugin for Simon trials
+- `src/jspsych-pvt.js`: jsPsych plugin for PVT trials

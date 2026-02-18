@@ -177,8 +177,23 @@
     const length = Math.max(1, Number.parseInt(block.length ?? 1, 10) || 1);
     const baseType = (typeof block.component_type === 'string' && block.component_type.trim()) ? block.component_type : 'rdm-trial';
 
-    // Clone so we can safely delete block-level-only fields
-    const windows = isObject(block.parameter_windows) ? { ...block.parameter_windows } : {};
+    // Clone so we can safely delete block-level-only fields.
+    // Builder exports parameter_windows as an array of { parameter, min, max }.
+    // Support both object-map and array forms.
+    const windows = (() => {
+      if (isObject(block.parameter_windows)) return { ...block.parameter_windows };
+      if (Array.isArray(block.parameter_windows)) {
+        const out = {};
+        for (const w of block.parameter_windows) {
+          if (!isObject(w)) continue;
+          const p = (w.parameter ?? '').toString().trim();
+          if (!p) continue;
+          out[p] = { min: w.min, max: w.max };
+        }
+        return out;
+      }
+      return {};
+    })();
     const values = isObject(block.parameter_values) ? { ...block.parameter_values } : {};
 
     const seed = Number.isFinite(block.seed) ? (block.seed >>> 0) : null;
@@ -295,7 +310,8 @@
         if (!isObject(w)) continue;
         const s = sampleNumber(w.min, w.max);
         if (s === null) continue;
-        t[k] = s;
+        const shouldRound = /(_ms|_px|_deg|_count|_trials|_repetitions)$/i.test(k);
+        t[k] = shouldRound ? Math.round(s) : s;
       }
 
       // Gabor cue presence gating (optional): jointly sample spatial/value cue presence per trial.
@@ -437,15 +453,30 @@
     return trials;
   }
 
-  function expandTimeline(rawTimeline) {
+  function expandTimeline(rawTimeline, opts) {
     const inTl = Array.isArray(rawTimeline) ? rawTimeline : [];
     const out = [];
+
+    const preserveFor = (() => {
+      const list = (opts && Array.isArray(opts.preserveBlocksForComponentTypes)) ? opts.preserveBlocksForComponentTypes : [];
+      return new Set(list.map(x => (x ?? '').toString().trim()).filter(Boolean));
+    })();
 
     for (const item of inTl) {
       if (!isObject(item)) continue;
 
       if (item.type === 'block') {
-        out.push(...expandBlock(item));
+        const baseType = (typeof item.component_type === 'string' && item.component_type.trim())
+          ? item.component_type.trim()
+          : (typeof item.block_component_type === 'string' && item.block_component_type.trim())
+            ? item.block_component_type.trim()
+            : 'rdm-trial';
+
+        if (preserveFor.has(baseType)) {
+          out.push(item);
+        } else {
+          out.push(...expandBlock(item));
+        }
         continue;
       }
 
@@ -557,6 +588,9 @@
     const defaultTransition = isObject(config.transition_settings) ? config.transition_settings : { duration_ms: 0, type: 'both' };
 
     const gaborDefaults = isObject(config.gabor_settings) ? config.gabor_settings : {};
+    const stroopDefaults = isObject(config.stroop_settings) ? config.stroop_settings : {};
+    const simonDefaults = isObject(config.simon_settings) ? config.simon_settings : {};
+    const pvtDefaults = isObject(config.pvt_settings) ? config.pvt_settings : {};
 
     const baseIti = (() => {
       const tp = isObject(config.timing_parameters) ? config.timing_parameters : {};
@@ -564,7 +598,10 @@
       return Number.isFinite(iti) ? iti : 0;
     })();
 
-    const expanded = expandTimeline(config.timeline);
+    const preservePvtBlocks = (pvtDefaults && pvtDefaults.add_trial_per_false_start === true);
+    const expanded = expandTimeline(config.timeline, {
+      preserveBlocksForComponentTypes: preservePvtBlocks ? ['pvt-trial'] : []
+    });
 
     const timeline = [];
 
@@ -830,6 +867,180 @@
     for (const item of expanded) {
       const type = item.type;
 
+      // PVT blocks (special handling): optionally extend by one trial per false start
+      // to preserve the target number of valid (non-false-start) trials.
+      if (type === 'block') {
+        const baseType = (typeof item.component_type === 'string' && item.component_type.trim())
+          ? item.component_type.trim()
+          : (typeof item.block_component_type === 'string' && item.block_component_type.trim())
+            ? item.block_component_type.trim()
+            : '';
+
+        if (baseType === 'pvt-trial' && pvtDefaults && pvtDefaults.add_trial_per_false_start === true) {
+          const Pvt = requirePlugin('pvt (window.jsPsychPvt)', window.jsPsychPvt);
+
+          const targetValidTrials = Math.max(1, Number.parseInt(item.length ?? 1, 10) || 1);
+
+          // Builder exports parameter_windows as an array of { parameter, min, max }.
+          // Support both object-map and array forms.
+          const windows = (() => {
+            if (isObject(item.parameter_windows)) return { ...item.parameter_windows };
+            if (Array.isArray(item.parameter_windows)) {
+              const out = {};
+              for (const w of item.parameter_windows) {
+                if (!isObject(w)) continue;
+                const p = (w.parameter ?? '').toString().trim();
+                if (!p) continue;
+                out[p] = { min: w.min, max: w.max };
+              }
+              return out;
+            }
+            return {};
+          })();
+
+          const values = isObject(item.parameter_values) ? { ...item.parameter_values } : {};
+          const seed = Number.isFinite(item.seed) ? (item.seed >>> 0) : null;
+          const rng = seed === null ? Math.random : mulberry32(seed);
+
+          const sampleNumber = (min, max) => {
+            const a = Number(min);
+            const b = Number(max);
+            if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+            const lo = Math.min(a, b);
+            const hi = Math.max(a, b);
+            return lo + (hi - lo) * rng();
+          };
+
+          const sampleFromValues = (v) => {
+            if (Array.isArray(v)) {
+              if (v.length === 0) return null;
+              const idx = Math.floor(rng() * v.length);
+              return v[Math.max(0, Math.min(v.length - 1, idx))];
+            }
+            return v;
+          };
+
+          const toStr = (v) => (v === undefined || v === null) ? '' : v.toString();
+          const norm = (v) => toStr(v).trim();
+
+          const resolveDevice = (v, fallback) => {
+            const s = norm(v).toLowerCase();
+            if (s === 'keyboard' || s === 'mouse' || s === 'both') return s;
+            const fb = norm(fallback).toLowerCase();
+            if (fb === 'mouse' || fb === 'both') return fb;
+            return 'keyboard';
+          };
+
+          const parseBool = (v) => {
+            if (typeof v === 'boolean') return v;
+            if (typeof v === 'number') return v > 0;
+            if (typeof v === 'string') {
+              const s = v.trim().toLowerCase();
+              if (s === '' || s === 'inherit') return null;
+              if (s === 'true' || s === '1' || s === 'yes' || s === 'on' || s === 'enabled') return true;
+              if (s === 'false' || s === '0' || s === 'no' || s === 'off' || s === 'disabled') return false;
+            }
+            return null;
+          };
+
+          const state = {
+            target_valid_trials: targetValidTrials,
+            valid_done: 0,
+            total_done: 0
+          };
+
+          const internalOnFinish = (data) => {
+            state.total_done += 1;
+            const fs = (data && typeof data === 'object') ? (data.false_start === true) : false;
+            if (!fs) state.valid_done += 1;
+          };
+
+          const onFinish = maybeWrapOnFinishWithRewards(internalOnFinish, 'pvt-trial');
+
+          const trialTemplate = {
+            type: Pvt,
+
+            on_start: (trial) => {
+              // Sample parameters for this trial at runtime.
+              const sampled = {};
+
+              for (const [k, v] of Object.entries(values)) {
+                sampled[k] = sampleFromValues(v);
+              }
+
+              for (const [k, w] of Object.entries(windows)) {
+                if (!isObject(w)) continue;
+                const s = sampleNumber(w.min, w.max);
+                if (s === null) continue;
+                const shouldRound = /(_ms|_px|_deg|_count|_trials|_repetitions)$/i.test(k);
+                sampled[k] = shouldRound ? Math.round(s) : s;
+              }
+
+              // Resolve inheritance against experiment defaults.
+              trial.response_device = resolveDevice(
+                (sampled.response_device && sampled.response_device !== 'inherit') ? sampled.response_device : null,
+                pvtDefaults.response_device || 'keyboard'
+              );
+
+              trial.response_key = (typeof sampled.response_key === 'string' && sampled.response_key.trim() !== '' && sampled.response_key !== 'inherit')
+                ? sampled.response_key
+                : (typeof pvtDefaults.response_key === 'string' && pvtDefaults.response_key.trim() !== '' ? pvtDefaults.response_key : 'space');
+
+              trial.foreperiod_ms = Number.isFinite(Number(sampled.foreperiod_ms))
+                ? Number(sampled.foreperiod_ms)
+                : (Number.isFinite(Number(pvtDefaults.foreperiod_ms)) ? Number(pvtDefaults.foreperiod_ms) : 4000);
+
+              trial.trial_duration_ms = Number.isFinite(Number(sampled.trial_duration_ms))
+                ? Number(sampled.trial_duration_ms)
+                : (Number.isFinite(Number(pvtDefaults.trial_duration_ms)) ? Number(pvtDefaults.trial_duration_ms) : 10000);
+
+              const itiMs = Number.isFinite(Number(sampled.iti_ms))
+                ? Number(sampled.iti_ms)
+                : (Number.isFinite(Number(pvtDefaults.iti_ms)) ? Number(pvtDefaults.iti_ms) : baseIti);
+              trial.iti_ms = itiMs;
+              trial.post_trial_gap = itiMs;
+
+              const fbEnabled = (() => {
+                const a = parseBool(sampled.feedback_enabled);
+                if (a !== null) return a;
+                const b = parseBool(pvtDefaults.feedback_enabled);
+                if (b !== null) return b;
+                return false;
+              })();
+
+              const fbMessage = (typeof sampled.feedback_message === 'string' && sampled.feedback_message.trim() !== '' && sampled.feedback_message !== 'inherit')
+                ? sampled.feedback_message
+                : (typeof pvtDefaults.feedback_message === 'string' ? pvtDefaults.feedback_message : '');
+
+              trial.feedback_enabled = fbEnabled;
+              trial.feedback_message = fbMessage;
+
+              // Data fields
+              trial.data = {
+                plugin_type: 'pvt-trial',
+                task_type: 'pvt',
+                _generated_from_block: true,
+                _block_index: state.total_done,
+                pvt_target_valid_trials: state.target_valid_trials,
+                pvt_valid_trials_completed_before: state.valid_done,
+                pvt_total_trials_completed_before: state.total_done
+              };
+            },
+
+            on_finish: onFinish
+          };
+
+          timeline.push({
+            timeline: [trialTemplate],
+            loop_function: () => {
+              return state.valid_done < state.target_valid_trials;
+            }
+          });
+
+          continue;
+        }
+      }
+
       const socDefaults = (type === 'soc-dashboard' && isObject(config?.soc_dashboard_settings))
         ? config.soc_dashboard_settings
         : null;
@@ -1007,6 +1218,7 @@
         || type === 'soc-subtask-nback-like'
         || type === 'soc-subtask-flanker-like'
         || type === 'soc-subtask-wcst-like'
+        || type === 'soc-subtask-pvt-like'
       ) {
         const SocDashboard = requirePlugin('soc-dashboard (window.jsPsychSocDashboard)', window.jsPsychSocDashboard);
 
@@ -1016,6 +1228,7 @@
             case 'soc-subtask-nback-like': return 'nback-like';
             case 'soc-subtask-flanker-like': return 'flanker-like';
             case 'soc-subtask-wcst-like': return 'wcst-like';
+            case 'soc-subtask-pvt-like': return 'pvt-like';
             default: return 'unknown';
           }
         };
@@ -1152,6 +1365,334 @@
           data: {
             plugin_type: type,
             task_type: 'gabor',
+            _generated_from_block: !!item._generated_from_block,
+            _block_index: Number.isFinite(item._block_index) ? item._block_index : null
+          }
+        });
+        continue;
+      }
+
+      // Stroop task
+      if (type === 'stroop-trial') {
+        const Stroop = requirePlugin('stroop (window.jsPsychStroop)', window.jsPsychStroop);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
+
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+        delete itemCopy.on_start;
+        delete itemCopy.on_finish;
+
+        const stimuli = Array.isArray(stroopDefaults.stimuli) ? stroopDefaults.stimuli : [];
+
+        const toStr = (v) => (v === undefined || v === null) ? '' : v.toString();
+        const norm = (v) => toStr(v).trim();
+
+        const findInkHex = (inkName, fallbackHex) => {
+          const needle = norm(inkName).toLowerCase();
+          for (const s of stimuli) {
+            const n = norm(s && s.name).toLowerCase();
+            if (n && n === needle) {
+              const c = norm(s && (s.color || s.hex || s.color_hex));
+              if (c) return c;
+            }
+          }
+          return norm(fallbackHex) || '#ffffff';
+        };
+
+        const computeCongruency = (word, inkName) => {
+          const w = norm(word).toLowerCase();
+          const i = norm(inkName).toLowerCase();
+          if (!w || !i) return 'auto';
+          return (w === i) ? 'congruent' : 'incongruent';
+        };
+
+        const responseMode = (item.response_mode && item.response_mode !== 'inherit')
+          ? item.response_mode
+          : (stroopDefaults.response_mode || 'color_naming');
+
+        const responseDevice = (item.response_device && item.response_device !== 'inherit')
+          ? item.response_device
+          : (stroopDefaults.response_device || 'keyboard');
+
+        const choiceKeys = (Array.isArray(item.choice_keys) && item.choice_keys.length > 0)
+          ? item.choice_keys
+          : (Array.isArray(stroopDefaults.choice_keys) ? stroopDefaults.choice_keys : []);
+
+        const congruentKey = (typeof item.congruent_key === 'string' && item.congruent_key.trim() !== '')
+          ? item.congruent_key
+          : (typeof stroopDefaults.congruent_key === 'string' ? stroopDefaults.congruent_key : 'f');
+
+        const incongruentKey = (typeof item.incongruent_key === 'string' && item.incongruent_key.trim() !== '')
+          ? item.incongruent_key
+          : (typeof stroopDefaults.incongruent_key === 'string' ? stroopDefaults.incongruent_key : 'j');
+
+        const fontSizePx = Number.isFinite(Number(item.stimulus_font_size_px))
+          ? Number(item.stimulus_font_size_px)
+          : (Number.isFinite(Number(stroopDefaults.stimulus_font_size_px)) ? Number(stroopDefaults.stimulus_font_size_px) : 72);
+
+        const stimMs = Number.isFinite(Number(item.stimulus_duration_ms))
+          ? Number(item.stimulus_duration_ms)
+          : (Number.isFinite(Number(stroopDefaults.stimulus_duration_ms)) ? Number(stroopDefaults.stimulus_duration_ms) : 0);
+
+        const trialMs = Number.isFinite(Number(item.trial_duration_ms))
+          ? Number(item.trial_duration_ms)
+          : (Number.isFinite(Number(stroopDefaults.trial_duration_ms)) ? Number(stroopDefaults.trial_duration_ms) : 2000);
+
+        const itiMs = Number.isFinite(Number(item.iti_ms))
+          ? Number(item.iti_ms)
+          : (Number.isFinite(Number(stroopDefaults.iti_ms)) ? Number(stroopDefaults.iti_ms) : 0);
+
+        const word = norm(item.word || '');
+        const inkName = norm(item.ink_color_name || '');
+
+        const providedCongruency = norm(item.congruency || 'auto').toLowerCase();
+        const congruency = (providedCongruency === 'congruent' || providedCongruency === 'incongruent')
+          ? providedCongruency
+          : computeCongruency(word, inkName);
+
+        const inkHex = findInkHex(inkName, item.ink_color_hex);
+
+        timeline.push({
+          type: Stroop,
+
+          ...itemCopy,
+
+          // Effective defaults (compiler resolves inheritance)
+          stimuli,
+          response_mode: responseMode,
+          response_device: responseDevice,
+          choice_keys: choiceKeys,
+          congruent_key: congruentKey,
+          incongruent_key: incongruentKey,
+          stimulus_font_size_px: fontSizePx,
+          stimulus_duration_ms: stimMs,
+          trial_duration_ms: trialMs,
+          ink_color_hex: inkHex,
+          congruency,
+
+          post_trial_gap: itiMs,
+          ...(onFinish ? { on_finish: onFinish } : {}),
+
+          data: {
+            plugin_type: type,
+            task_type: 'stroop',
+            _generated_from_block: !!item._generated_from_block,
+            _block_index: Number.isFinite(item._block_index) ? item._block_index : null
+          }
+        });
+        continue;
+      }
+
+      // Simon task
+      if (type === 'simon-trial') {
+        const Simon = requirePlugin('simon (window.jsPsychSimon)', window.jsPsychSimon);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
+
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+        delete itemCopy.on_start;
+        delete itemCopy.on_finish;
+
+        const stimuli = Array.isArray(simonDefaults.stimuli) ? simonDefaults.stimuli : [];
+
+        const toStr = (v) => (v === undefined || v === null) ? '' : v.toString();
+        const norm = (v) => toStr(v).trim();
+
+        const coerceSide = (v, fallback) => {
+          const s = norm(v).toLowerCase();
+          if (s === 'left' || s === 'right') return s;
+          return fallback;
+        };
+
+        const findStimulusHex = (colorName, fallbackHex) => {
+          const needle = norm(colorName).toLowerCase();
+          for (const s of stimuli) {
+            const n = norm(s && s.name).toLowerCase();
+            if (n && n === needle) {
+              const c = norm(s && (s.color || s.hex || s.color_hex));
+              if (c) return c;
+            }
+          }
+          return norm(fallbackHex) || '#ffffff';
+        };
+
+        const resolveDevice = (v, fallback) => {
+          const s = norm(v).toLowerCase();
+          if (s === 'keyboard' || s === 'mouse') return s;
+          return (fallback || 'keyboard').toString().trim().toLowerCase() === 'mouse' ? 'mouse' : 'keyboard';
+        };
+
+        const responseDevice = resolveDevice(
+          (item.response_device && item.response_device !== 'inherit') ? item.response_device : null,
+          simonDefaults.response_device || 'keyboard'
+        );
+
+        const leftKey = (typeof item.left_key === 'string' && item.left_key.trim() !== '' && item.left_key !== 'inherit')
+          ? item.left_key
+          : (typeof simonDefaults.left_key === 'string' ? simonDefaults.left_key : 'f');
+
+        const rightKey = (typeof item.right_key === 'string' && item.right_key.trim() !== '' && item.right_key !== 'inherit')
+          ? item.right_key
+          : (typeof simonDefaults.right_key === 'string' ? simonDefaults.right_key : 'j');
+
+        const diameterPx = Number.isFinite(Number(item.circle_diameter_px))
+          ? Number(item.circle_diameter_px)
+          : (Number.isFinite(Number(simonDefaults.circle_diameter_px)) ? Number(simonDefaults.circle_diameter_px) : 140);
+
+        const stimMs = Number.isFinite(Number(item.stimulus_duration_ms))
+          ? Number(item.stimulus_duration_ms)
+          : (Number.isFinite(Number(simonDefaults.stimulus_duration_ms)) ? Number(simonDefaults.stimulus_duration_ms) : 0);
+
+        const trialMs = Number.isFinite(Number(item.trial_duration_ms))
+          ? Number(item.trial_duration_ms)
+          : (Number.isFinite(Number(simonDefaults.trial_duration_ms)) ? Number(simonDefaults.trial_duration_ms) : 1500);
+
+        const itiMs = Number.isFinite(Number(item.iti_ms))
+          ? Number(item.iti_ms)
+          : (Number.isFinite(Number(simonDefaults.iti_ms)) ? Number(simonDefaults.iti_ms) : 0);
+
+        const stimulusSide = coerceSide(item.stimulus_side, 'left');
+        const stimulusColorName = norm(item.stimulus_color_name || '')
+          || norm(stimuli[0] && stimuli[0].name)
+          || 'BLUE';
+
+        const providedCorrectSide = coerceSide(item.correct_response_side, '');
+        const derivedCorrectSide = (() => {
+          const needle = stimulusColorName.toLowerCase();
+          const first = norm(stimuli[0] && stimuli[0].name).toLowerCase();
+          const second = norm(stimuli[1] && stimuli[1].name).toLowerCase();
+          if (needle && first && needle === first) return 'left';
+          if (needle && second && needle === second) return 'right';
+          return 'left';
+        })();
+
+        const correctSide = (providedCorrectSide === 'left' || providedCorrectSide === 'right')
+          ? providedCorrectSide
+          : derivedCorrectSide;
+
+        const congruency = (stimulusSide === correctSide) ? 'congruent' : 'incongruent';
+        const stimulusHex = findStimulusHex(stimulusColorName, item.stimulus_color_hex);
+
+        timeline.push({
+          type: Simon,
+
+          ...itemCopy,
+
+          // Effective defaults (compiler resolves inheritance)
+          stimuli,
+          response_device: responseDevice,
+          left_key: leftKey,
+          right_key: rightKey,
+          circle_diameter_px: diameterPx,
+          stimulus_duration_ms: stimMs,
+          trial_duration_ms: trialMs,
+
+          stimulus_side: stimulusSide,
+          stimulus_color_name: stimulusColorName,
+          stimulus_color_hex: stimulusHex,
+          correct_response_side: correctSide,
+          congruency,
+
+          iti_ms: itiMs,
+          post_trial_gap: itiMs,
+          ...(onFinish ? { on_finish: onFinish } : {}),
+
+          data: {
+            plugin_type: type,
+            task_type: 'simon',
+            _generated_from_block: !!item._generated_from_block,
+            _block_index: Number.isFinite(item._block_index) ? item._block_index : null
+          }
+        });
+        continue;
+      }
+
+      // Psychomotor Vigilance Task (PVT)
+      if (type === 'pvt-trial') {
+        const Pvt = requirePlugin('pvt (window.jsPsychPvt)', window.jsPsychPvt);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
+
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+        delete itemCopy.on_start;
+        delete itemCopy.on_finish;
+
+        const toStr = (v) => (v === undefined || v === null) ? '' : v.toString();
+        const norm = (v) => toStr(v).trim();
+
+        const resolveDevice = (v, fallback) => {
+          const s = norm(v).toLowerCase();
+          if (s === 'keyboard' || s === 'mouse' || s === 'both') return s;
+          const fb = norm(fallback).toLowerCase();
+          if (fb === 'mouse' || fb === 'both') return fb;
+          return 'keyboard';
+        };
+
+        const responseDevice = resolveDevice(
+          (item.response_device && item.response_device !== 'inherit') ? item.response_device : null,
+          pvtDefaults.response_device || 'keyboard'
+        );
+
+        const parseBool = (v) => {
+          if (typeof v === 'boolean') return v;
+          if (typeof v === 'number') return v > 0;
+          if (typeof v === 'string') {
+            const s = v.trim().toLowerCase();
+            if (s === '' || s === 'inherit') return null;
+            if (s === 'true' || s === '1' || s === 'yes' || s === 'on' || s === 'enabled') return true;
+            if (s === 'false' || s === '0' || s === 'no' || s === 'off' || s === 'disabled') return false;
+          }
+          return null;
+        };
+
+        const feedbackEnabled = (() => {
+          const a = parseBool(item.feedback_enabled);
+          if (a !== null) return a;
+          const b = parseBool(pvtDefaults.feedback_enabled);
+          if (b !== null) return b;
+          return false;
+        })();
+
+        const feedbackMessage = (typeof item.feedback_message === 'string' && item.feedback_message.trim() !== '' && item.feedback_message !== 'inherit')
+          ? item.feedback_message
+          : (typeof pvtDefaults.feedback_message === 'string' ? pvtDefaults.feedback_message : '');
+
+        const responseKey = (typeof item.response_key === 'string' && item.response_key.trim() !== '' && item.response_key !== 'inherit')
+          ? item.response_key
+          : (typeof pvtDefaults.response_key === 'string' && pvtDefaults.response_key.trim() !== '' ? pvtDefaults.response_key : 'space');
+
+        const foreperiodMs = Number.isFinite(Number(item.foreperiod_ms))
+          ? Number(item.foreperiod_ms)
+          : (Number.isFinite(Number(pvtDefaults.foreperiod_ms)) ? Number(pvtDefaults.foreperiod_ms) : 4000);
+
+        const trialMs = Number.isFinite(Number(item.trial_duration_ms))
+          ? Number(item.trial_duration_ms)
+          : (Number.isFinite(Number(pvtDefaults.trial_duration_ms)) ? Number(pvtDefaults.trial_duration_ms) : 10000);
+
+        const itiMs = Number.isFinite(Number(item.iti_ms))
+          ? Number(item.iti_ms)
+          : (Number.isFinite(Number(pvtDefaults.iti_ms)) ? Number(pvtDefaults.iti_ms) : baseIti);
+
+        timeline.push({
+          type: Pvt,
+
+          ...itemCopy,
+
+          response_device: responseDevice,
+          response_key: responseKey,
+          foreperiod_ms: foreperiodMs,
+          trial_duration_ms: trialMs,
+
+          feedback_enabled: feedbackEnabled,
+          feedback_message: feedbackMessage,
+
+          iti_ms: itiMs,
+          post_trial_gap: itiMs,
+          ...(onFinish ? { on_finish: onFinish } : {}),
+
+          data: {
+            plugin_type: type,
+            task_type: 'pvt',
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }

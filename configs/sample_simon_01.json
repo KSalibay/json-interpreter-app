@@ -1,0 +1,57 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "simon",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "simon_settings": {
+    "stimuli": [
+      { "name": "BLUE", "color": "#0066ff" },
+      { "name": "ORANGE", "color": "#ff7a18" }
+    ],
+    "response_device": "keyboard",
+    "left_key": "f",
+    "right_key": "j",
+    "circle_diameter_px": 140,
+    "stimulus_duration_ms": 0,
+    "trial_duration_ms": 1500,
+    "iti_ms": 500
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 760px; margin: 0 auto; text-align:left;\"><h2>Sample Simon</h2><p>Two circles appear on screen.</p><p><b>BLUE</b> is the LEFT response (F). <b>ORANGE</b> is the RIGHT response (J).</p><p>Respond based on the color, ignoring the side (this creates congruent/incongruent trials).</p><p>Press any key to begin.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "simon-trial",
+      "stimulus_side": "left",
+      "stimulus_color_name": "BLUE",
+      "response_device": "inherit"
+    },
+    {
+      "type": "simon-trial",
+      "stimulus_side": "right",
+      "stimulus_color_name": "BLUE",
+      "response_device": "inherit"
+    },
+    {
+      "type": "block",
+      "component_type": "simon-trial",
+      "length": 16,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "stimulus_color_name": ["BLUE", "ORANGE"],
+        "stimulus_side": ["left", "right"],
+        "response_device": "inherit"
+      },
+      "parameter_windows": [
+        { "parameter": "trial_duration_ms", "min": 1200, "max": 1800 },
+        { "parameter": "iti_ms", "min": 300, "max": 700 }
+      ]
+    }
+  ]
+}

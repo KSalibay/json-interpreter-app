@@ -19,7 +19,7 @@
 
   const info = {
     name: 'soc-dashboard',
-    version: '0.6.5',
+    version: '0.6.6',
     parameters: {
       trial_duration_ms: { type: PT.INT, default: 60000 },
       end_key: { type: PT.STRING, default: 'escape' },
@@ -118,6 +118,18 @@
       .replaceAll("'", '&#039;');
   }
 
+  function getUrlFlag(name) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const v = (params.get(name) || '').toString().trim().toLowerCase();
+      if (!v) return false;
+      if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function makeShellStyle() {
     const style = document.createElement('style');
     style.dataset.socDashboard = 'true';
@@ -140,6 +152,7 @@
       .soc-appwin.soc-win-hidden { visibility: hidden; pointer-events: none; }
       .soc-appwin .titlebar { height: 38px; display:flex; align-items:center; gap: 10px; padding: 0 12px; background: rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.10); }
       .soc-appwin .titlebar .ttl { font-weight: 600; font-size: 13px; }
+      .soc-appwin .titlebar .soc-title-debug { margin-left: auto; font-size: 11px; opacity: 0.85; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
       .soc-appwin .content { padding: 12px; height: calc(100% - 38px); overflow:auto; }
 
       .soc-card { border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; }
@@ -175,6 +188,25 @@
       .soc-subtask-overlay .panel h3 { margin: 0 0 8px 0; font-size: 14px; }
       .soc-subtask-overlay .panel .body { font-size: 12px; opacity: 0.95; line-height: 1.45; }
       .soc-subtask-overlay .panel .hint { margin-top: 10px; font-size: 12px; opacity: 0.80; }
+
+      /* PVT-like (alert vigilance) */
+      .soc-pvt-shell { display:flex; flex-direction: column; gap: 10px; }
+      .soc-pvt-status { font-size: 12px; opacity: 0.85; }
+      .soc-pvt-logwrap { border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; overflow: hidden; background: rgba(0,0,0,0.16); }
+      .soc-pvt-log { width:100%; border-collapse: collapse; font-size: 12px; }
+      .soc-pvt-log th { text-align:left; font-weight: 650; font-size: 11px; opacity: 0.9; background: rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.10); padding: 7px 8px; }
+      .soc-pvt-log td { border-bottom: 1px solid rgba(255,255,255,0.06); padding: 7px 8px; vertical-align: top; }
+      .soc-pvt-log tr:last-child td { border-bottom: none; }
+      .soc-pvt-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+      .soc-pvt-alert-overlay { position: absolute; inset: 0; z-index: 56; display:none; align-items:center; justify-content:center; padding: 16px; background: rgba(2,6,23,0.62); backdrop-filter: blur(4px); }
+      .soc-pvt-alert-overlay.show { display:flex; }
+      .soc-pvt-alert-overlay .panel { position: relative; max-width: 520px; width: 100%; border-radius: 16px; border: 1px solid rgba(255,255,255,0.16); background: rgba(12,16,26,0.94); box-shadow: 0 20px 70px rgba(0,0,0,0.62); padding: 16px; }
+      .soc-pvt-alert-overlay .kicker { font-size: 12px; opacity: 0.85; }
+      .soc-pvt-alert-overlay .count { margin-top: 10px; font-size: 56px; font-weight: 800; letter-spacing: -0.5px; }
+      .soc-pvt-alert-overlay .hint { margin-top: 10px; font-size: 12px; opacity: 0.85; }
+      .soc-pvt-flash { position:absolute; inset:0; border-radius: 16px; background: rgba(239,68,68,0.25); box-shadow: inset 0 0 0 1px rgba(239,68,68,0.25); display:block; opacity: 0; transition: opacity 60ms linear; pointer-events: none; }
+      .soc-pvt-flash.show { opacity: 1; }
 
       /* Inline instructions (for scheduled subtasks: non-blocking) */
       .soc-inline-instructions { margin: 0 0 10px; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); }
@@ -271,6 +303,9 @@
   JsPsychSocDashboardPlugin.prototype.trial = function (display_element, trial) {
     const startTs = nowMs();
     const events = [];
+
+    // Optional live debug UI. Enabled by either `?soc_debug=1` or existing `?debug=1`.
+    const socDebugEnabled = getUrlFlag('soc_debug') || getUrlFlag('debug');
 
     const trialMs = Number.isFinite(Number(trial.trial_duration_ms)) ? Number(trial.trial_duration_ms) : null;
     const endKey = normalizeKeyName(trial.end_key ?? 'escape');
@@ -469,12 +504,14 @@
     };
 
     const windowEls = new Array(windowsSpec.length).fill(null);
+    const windowDebugEls = new Array(windowsSpec.length).fill(null);
     const subtaskAutoStart = new Array(windowsSpec.length).fill(null);
     const subtaskForceEnd = new Array(windowsSpec.length).fill(null);
     const windowHasStarted = new Array(windowsSpec.length).fill(false);
 
     const flankerStates = new Array(windowsSpec.length).fill(null);
     const wcstStates = new Array(windowsSpec.length).fill(null);
+    const pvtLikeStates = new Array(windowsSpec.length).fill(null);
 
     // Per-window instruction popup (click-to-start)
     const windowInstructionsHost = new Array(windowsSpec.length).fill(null);
@@ -493,7 +530,7 @@
       for (let i = 0; i < windowsSpec.length; i++) {
         if (!isWindowVisible(i)) continue;
         const t = (windowsSpec[i]?.subtask_type ?? '').toString().toLowerCase();
-        if (t === 'sart-like' || t === 'nback-like' || t === 'flanker-like' || t === 'wcst-like') return i;
+        if (t === 'sart-like' || t === 'nback-like' || t === 'flanker-like' || t === 'wcst-like' || t === 'pvt-like') return i;
       }
       for (let i = 0; i < windowsSpec.length; i++) {
         if (isWindowVisible(i)) return i;
@@ -696,15 +733,24 @@
       const isNbackLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'nback-like';
       const isFlankerLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'flanker-like';
       const isWcstLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'wcst-like';
+      const isPvtLike = (wSpec.subtask_type || '').toString().toLowerCase() === 'pvt-like';
       const winId = `soc_win_${i}`;
 
+      const dbgHtml = socDebugEnabled
+        ? `<div class="soc-title-debug" id="soc_dbg_${i}">DBG</div>`
+        : '';
+
       w.innerHTML = `
-        <div class="titlebar"><div class="ttl">${escHtml(title)} · ${escHtml(wSpec.subtask_title)}</div></div>
+        <div class="titlebar"><div class="ttl">${escHtml(title)} · ${escHtml(wSpec.subtask_title)}</div>${dbgHtml}</div>
         <div class="content">
           <div class="soc-card" id="${escHtml(winId)}"></div>
         </div>
       `;
       windows.appendChild(w);
+
+      if (socDebugEnabled) {
+        windowDebugEls[i] = w.querySelector(`#soc_dbg_${i}`);
+      }
 
       // Initialize subtask content
       const host = w.querySelector(`#${winId}`);
@@ -1518,7 +1564,489 @@
         continue;
       }
 
-      if (!isSartLike && !isNbackLike && !isFlankerLike && !isWcstLike) {
+      if (isPvtLike) {
+        const setWindowDebug = (text) => {
+          if (!socDebugEnabled) return;
+          const el = windowDebugEls[i];
+          if (!el) return;
+          el.textContent = (text ?? '').toString();
+        };
+
+        const coercePvtLikeConfig = (raw) => {
+          const o = (raw && typeof raw === 'object') ? raw : {};
+
+          const responseDevice = ((o.response_device ?? 'keyboard').toString().trim().toLowerCase() === 'mouse') ? 'mouse' : 'keyboard';
+          const responseKey = normalizeKeyName(o.response_key ?? 'space');
+
+          const visibleEntries = clamp(o.visible_entries, 3, 30);
+          const logInterval = clamp(o.log_scroll_interval_ms ?? o.scroll_interval_ms, 50, 5000);
+
+          let minAlert = Number(o.alert_min_interval_ms);
+          let maxAlert = Number(o.alert_max_interval_ms);
+          minAlert = Number.isFinite(minAlert) ? Math.max(250, Math.floor(minAlert)) : 2000;
+          maxAlert = Number.isFinite(maxAlert) ? Math.max(250, Math.floor(maxAlert)) : 6000;
+          if (maxAlert < minAlert) {
+            const tmp = minAlert;
+            minAlert = maxAlert;
+            maxAlert = tmp;
+          }
+
+          const countdownSeconds = Number.isFinite(Number(o.countdown_seconds)) ? Math.max(0, Math.min(10, Math.floor(Number(o.countdown_seconds)))) : 3;
+          const flashMs = clamp(o.flash_duration_ms, 20, 2000);
+          const responseWindowMs = clamp(o.response_window_ms, 100, 20000);
+
+          let minRun = Number(o.min_run_ms);
+          let maxRun = Number(o.max_run_ms);
+          minRun = Number.isFinite(minRun) ? Math.max(0, Math.floor(minRun)) : 0;
+          maxRun = Number.isFinite(maxRun) ? Math.max(0, Math.floor(maxRun)) : 0;
+          if (minRun > 0 && maxRun > 0 && maxRun < minRun) {
+            const tmp = minRun;
+            minRun = maxRun;
+            maxRun = tmp;
+          }
+
+          const showCountdown = (o.show_countdown !== undefined) ? !!o.show_countdown : true;
+          const showRedFlash = (o.show_red_flash !== undefined) ? !!o.show_red_flash : true;
+
+          return {
+            response_device: responseDevice,
+            response_key: responseKey,
+            visible_entries: visibleEntries,
+            log_scroll_interval_ms: logInterval,
+            alert_min_interval_ms: minAlert,
+            alert_max_interval_ms: maxAlert,
+            countdown_seconds: countdownSeconds,
+            flash_duration_ms: flashMs,
+            response_window_ms: responseWindowMs,
+            min_run_ms: minRun,
+            max_run_ms: maxRun,
+            show_countdown: showCountdown,
+            show_red_flash: showRedFlash
+          };
+        };
+
+        const cfg = coercePvtLikeConfig(wSpec.subtask || {});
+        const state = {
+          idx: i,
+          title: wSpec.subtask_title,
+          cfg,
+          ended: false,
+          started: false,
+          subtask_start_ts: null,
+          statusEl: null,
+          tbodyEl: null,
+          overlayEl: null,
+          overlayCountEl: null,
+          flashEl: null,
+          lines: [],
+          current: null,
+          presented: 0,
+          responded: 0,
+          false_starts: 0,
+          timeouts: 0,
+          respond: null
+        };
+        pvtLikeStates[i] = state;
+
+        setWindowDebug('PVT P:0 R:0 FS:0 TO:0');
+
+        const tSubtaskMs = () => {
+          const base = (state.subtask_start_ts ?? startTs);
+          return Math.round(nowMs() - base);
+        };
+
+        const resolvedResponseControl = (cfg.response_device === 'keyboard')
+          ? ((cfg.response_key === ' ' ? 'SPACE' : cfg.response_key) || 'SPACE')
+          : 'CLICK';
+
+        const instructionsTitleRaw = (wSpec?.subtask?.instructions_title ?? 'Incident alert monitor').toString();
+        const instructionsTitle = instructionsTitleRaw.trim() ? instructionsTitleRaw : 'Incident alert monitor';
+
+        const resolvedInstructionsHtml = substitutePlaceholders(subtaskInstructions, {
+          RESPONSE_CONTROL: resolvedResponseControl
+        });
+
+        host.innerHTML = `
+          <div class="soc-log-header">
+            <div>
+              <h4 style="margin:0;">Incident alerts</h4>
+              <div class="hint">Press <b>${escHtml(resolvedResponseControl)}</b> when the <b>red flash</b> appears.</div>
+            </div>
+            <div class="soc-pvt-status" id="soc_pvt_status_${i}">Ready</div>
+          </div>
+
+          <div class="soc-pvt-logwrap">
+            <table class="soc-pvt-log" aria-label="Console log feed">
+              <thead>
+                <tr>
+                  <th style="width: 90px;">Time</th>
+                  <th style="width: 58px;">Lvl</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="soc_pvt_tbody_${i}"></tbody>
+            </table>
+          </div>
+        `;
+
+        const statusEl = host.querySelector(`#soc_pvt_status_${i}`);
+        const tbodyEl = host.querySelector(`#soc_pvt_tbody_${i}`);
+        state.statusEl = statusEl;
+        state.tbodyEl = tbodyEl;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'soc-pvt-alert-overlay';
+        overlay.innerHTML = `
+          <div class="panel" role="button" tabindex="0" aria-label="Alert">
+            <div class="kicker">Alert incoming</div>
+            <div class="count" id="soc_pvt_count_${i}">—</div>
+            <div class="hint">Respond when the red flash appears. (${escHtml(resolvedResponseControl)})</div>
+            <div class="soc-pvt-flash" id="soc_pvt_flash_${i}"></div>
+          </div>
+        `;
+        w.appendChild(overlay);
+        state.overlayEl = overlay;
+        state.overlayCountEl = overlay.querySelector(`#soc_pvt_count_${i}`);
+        state.flashEl = overlay.querySelector(`#soc_pvt_flash_${i}`);
+
+        const addLine = (lvl, msg) => {
+          const ts = Date.now();
+          state.lines.push({ ts, lvl: (lvl || 'INFO').toString(), msg: (msg || '').toString() });
+          // Keep memory bounded
+          if (state.lines.length > 200) state.lines.splice(0, state.lines.length - 200);
+        };
+
+        const renderLines = () => {
+          if (!tbodyEl) return;
+          const lines = state.lines.slice(-cfg.visible_entries);
+          tbodyEl.innerHTML = lines.map((ln) => {
+            const t = formatClock(ln.ts);
+            const lvl = escHtml(ln.lvl);
+            const msg = escHtml(ln.msg);
+            return `
+              <tr>
+                <td>${escHtml(t)}</td>
+                <td><span class="soc-log-tag">${lvl}</span></td>
+                <td class="soc-pvt-mono">${msg}</td>
+              </tr>
+            `;
+          }).join('');
+        };
+
+        const randomLogLine = () => {
+          const lvl = (Math.random() < 0.10) ? 'WARN' : 'INFO';
+          const svc = pickRandom(['auth-service', 'edge-proxy', 'payments-api', 'ids', 'db', 'monitor', 'vpn-gw']) || 'svc';
+          const msg = pickRandom([
+            'heartbeat ok',
+            'token refresh ok',
+            'routing table updated',
+            `conn=${randomInt(8, 64)} pool healthy`,
+            `p95 latency=${randomInt(40, 220)}ms`,
+            `signature set synced`,
+            `unexpected login from ${randomIp()}`
+          ]) || 'event';
+          return { lvl, msg: `${svc}: ${msg}` };
+        };
+
+        const hideAlert = (reason) => {
+          if (state.overlayEl) state.overlayEl.classList.remove('show');
+          try { state.flashEl && state.flashEl.classList.remove('show'); } catch { /* ignore */ }
+          if (state.overlayCountEl) state.overlayCountEl.textContent = '—';
+          if (state.current) {
+            state.current = null;
+          }
+          if (reason) {
+            addLine('INFO', `alert closed (${reason})`);
+            renderLines();
+          }
+        };
+
+        const respond = (device, detail) => {
+          if (!state.started || state.ended) return;
+          const now = nowMs();
+
+          const current = state.current;
+          const isActive = current && current.flash_onset_ts !== null;
+          if (!isActive) {
+            state.false_starts += 1;
+            events.push({
+              t_ms: Math.round(now - startTs),
+              t_subtask_ms: tSubtaskMs(),
+              type: 'pvt_like_false_start',
+              subtask_index: i,
+              subtask_title: state.title,
+              device: (device ?? '').toString() || null,
+              detail: (detail ?? '').toString() || null
+            });
+            addLine('WARN', `false start (${device || 'input'})`);
+            renderLines();
+            setWindowDebug(`PVT P:${state.presented} R:${state.responded} FS:${state.false_starts} TO:${state.timeouts}`);
+            return;
+          }
+
+          if (current.responded) return;
+          current.responded = true;
+          state.responded += 1;
+
+          const rt = Math.max(0, Math.round(now - current.flash_onset_ts));
+          events.push({
+            t_ms: Math.round(now - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'pvt_like_response',
+            subtask_index: i,
+            subtask_title: state.title,
+            device: (device ?? '').toString() || null,
+            detail: (detail ?? '').toString() || null,
+            stimulus_id: current.id,
+            rt_ms: rt
+          });
+          addLine('INFO', `response rt=${rt}ms`);
+          renderLines();
+          setWindowDebug(`PVT P:${state.presented} R:${state.responded} FS:${state.false_starts} TO:${state.timeouts}`);
+          hideAlert('respond');
+          scheduleNextAlert();
+        };
+        state.respond = respond;
+
+        overlay.addEventListener('click', (e) => {
+          try { e.stopPropagation(); } catch { /* ignore */ }
+          if (state.cfg.response_device !== 'mouse') return;
+          respond('mouse', 'click');
+        });
+        overlay.addEventListener('keydown', (e) => {
+          const k = normalizeKeyName(e.key);
+          if (k === 'Enter' || k === ' ') {
+            if (state.cfg.response_device !== 'mouse') return;
+            e.preventDefault();
+            respond('mouse', 'key');
+          }
+        });
+
+        // Mouse responses: allow clicking anywhere in the window.
+        // This ensures mouse false-starts are logged even when the alert overlay is not visible.
+        w.addEventListener('click', (e) => {
+          if (state.cfg.response_device !== 'mouse') return;
+          const t = e && e.target;
+          if (t && t.closest && t.closest('.soc-pvt-alert-overlay')) return;
+          respond('mouse', 'click');
+        });
+
+        const beginAlert = () => {
+          if (state.ended || !state.started) return;
+
+          const id = `pvt_${i}_${Date.now()}_${state.presented + 1}`;
+          state.presented += 1;
+          setWindowDebug(`PVT P:${state.presented} R:${state.responded} FS:${state.false_starts} TO:${state.timeouts}`);
+
+          const countdown = Math.max(0, Math.floor(cfg.countdown_seconds));
+          state.current = {
+            id,
+            countdown_seconds: countdown,
+            flash_onset_ts: null,
+            responded: false
+          };
+
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'pvt_like_alert_scheduled',
+            subtask_index: i,
+            subtask_title: state.title,
+            stimulus_id: id,
+            countdown_seconds: countdown
+          });
+
+          if (state.overlayEl) state.overlayEl.classList.add('show');
+          if (state.flashEl) state.flashEl.classList.remove('show');
+
+          const doFlash = () => {
+            if (state.ended || !state.started) return;
+            const cur = state.current;
+            if (!cur || cur.id !== id) return;
+
+            cur.flash_onset_ts = nowMs();
+
+            events.push({
+              t_ms: Math.round(cur.flash_onset_ts - startTs),
+              t_subtask_ms: tSubtaskMs(),
+              type: 'pvt_like_flash_onset',
+              subtask_index: i,
+              subtask_title: state.title,
+              stimulus_id: id
+            });
+
+            if (cfg.show_red_flash && state.flashEl) {
+              state.flashEl.classList.add('show');
+              setSafeTimeout(() => {
+                try { state.flashEl && state.flashEl.classList.remove('show'); } catch { /* ignore */ }
+              }, cfg.flash_duration_ms);
+            }
+
+            if (state.overlayCountEl) state.overlayCountEl.textContent = 'GO';
+
+            setSafeTimeout(() => {
+              const cur2 = state.current;
+              if (!cur2 || cur2.id !== id) return;
+              if (cur2.responded) return;
+
+              state.timeouts += 1;
+              events.push({
+                t_ms: Math.round(nowMs() - startTs),
+                t_subtask_ms: tSubtaskMs(),
+                type: 'pvt_like_timeout',
+                subtask_index: i,
+                subtask_title: state.title,
+                stimulus_id: id
+              });
+              addLine('WARN', 'timeout');
+              renderLines();
+              setWindowDebug(`PVT P:${state.presented} R:${state.responded} FS:${state.false_starts} TO:${state.timeouts}`);
+              hideAlert('timeout');
+              scheduleNextAlert();
+            }, cfg.response_window_ms);
+          };
+
+          if (!cfg.show_countdown || countdown <= 0) {
+            if (state.overlayCountEl) state.overlayCountEl.textContent = '…';
+            doFlash();
+            return;
+          }
+
+          let remaining = countdown;
+          const tickCountdown = () => {
+            if (state.ended || !state.started) return;
+            const cur = state.current;
+            if (!cur || cur.id !== id) return;
+
+            if (state.overlayCountEl) state.overlayCountEl.textContent = String(Math.max(1, remaining));
+            remaining -= 1;
+            if (remaining <= 0) {
+              doFlash();
+              return;
+            }
+            setSafeTimeout(tickCountdown, 1000);
+          };
+
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'pvt_like_countdown_start',
+            subtask_index: i,
+            subtask_title: state.title,
+            stimulus_id: id,
+            countdown_seconds: countdown
+          });
+          tickCountdown();
+        };
+
+        const scheduleNextAlert = () => {
+          if (state.ended || !state.started) return;
+          const gap = randomInt(cfg.alert_min_interval_ms, cfg.alert_max_interval_ms);
+          setSafeTimeout(() => {
+            if (state.ended || !state.started) return;
+            beginAlert();
+          }, gap);
+        };
+
+        const computeStopAt = () => {
+          const minR = cfg.min_run_ms;
+          const maxR = cfg.max_run_ms;
+          if (!minR && !maxR) return Infinity;
+          if (minR && !maxR) return minR;
+          if (!minR && maxR) return maxR;
+          return randomInt(minR, maxR);
+        };
+
+        let startWall = null;
+        let stopAt = null;
+
+        const tickLog = () => {
+          if (state.ended || !state.started) return;
+          const { lvl, msg } = randomLogLine();
+          addLine(lvl, msg);
+          renderLines();
+
+          const elapsed = Math.max(0, nowMs() - startWall);
+          if (Number.isFinite(stopAt) && elapsed >= stopAt) {
+            state.ended = true;
+            if (statusEl) statusEl.textContent = 'Complete';
+            hideAlert('stopped');
+            events.push({
+              t_ms: Math.round(nowMs() - startTs),
+              t_subtask_ms: tSubtaskMs(),
+              type: 'pvt_like_subtask_auto_end',
+              subtask_index: i,
+              subtask_title: state.title,
+              presented: state.presented,
+              responded: state.responded,
+              false_starts: state.false_starts,
+              timeouts: state.timeouts
+            });
+            return;
+          }
+
+          setSafeTimeout(tickLog, cfg.log_scroll_interval_ms);
+        };
+
+        const startPvtLikeSubtask = () => {
+          if (state.started) return;
+          state.started = true;
+          state.subtask_start_ts = nowMs();
+          startWall = state.subtask_start_ts;
+          stopAt = computeStopAt();
+
+          if (statusEl) statusEl.textContent = 'Running…';
+          setWindowDebug(`PVT P:${state.presented} R:${state.responded} FS:${state.false_starts} TO:${state.timeouts}`);
+
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: 0,
+            type: 'pvt_like_subtask_start',
+            subtask_index: i,
+            subtask_title: state.title
+          });
+
+          // Prime a few lines so the window doesn't start empty.
+          for (let j = 0; j < 6; j++) {
+            const { lvl, msg } = randomLogLine();
+            addLine(lvl, msg);
+          }
+          renderLines();
+
+          scheduleNextAlert();
+          setSafeTimeout(tickLog, 0);
+        };
+
+        subtaskAutoStart[i] = startPvtLikeSubtask;
+        subtaskForceEnd[i] = (reason) => {
+          if (state.ended) return;
+          state.ended = true;
+          if (statusEl) statusEl.textContent = 'Complete';
+          hideAlert('forced_end');
+          setWindowDebug(`PVT END P:${state.presented} R:${state.responded} FS:${state.false_starts} TO:${state.timeouts}`);
+          events.push({
+            t_ms: Math.round(nowMs() - startTs),
+            t_subtask_ms: tSubtaskMs(),
+            type: 'pvt_like_subtask_forced_end',
+            reason: (reason ?? 'forced').toString(),
+            subtask_index: i,
+            subtask_title: state.title,
+            presented: state.presented,
+            responded: state.responded,
+            false_starts: state.false_starts,
+            timeouts: state.timeouts
+          });
+        };
+
+        // Mount overlays on the full window so they can sit above the titlebar.
+        windowInstructionsHost[i] = w;
+        windowInstructionsTitle[i] = instructionsTitle;
+        windowInstructionsHtml[i] = resolvedInstructionsHtml;
+        maybeInstallWindowInstructions(i);
+        continue;
+      }
+
+      if (!isSartLike && !isNbackLike && !isFlankerLike && !isWcstLike && !isPvtLike) {
         host.innerHTML = `
           <h4>Subtask window</h4>
           <div class="muted">Desktop icon clicks are distractors.${wSpec.subtask_type ? ` • Subtask: ${escHtml(wSpec.subtask_type)}` : ''}</div>
@@ -3234,6 +3762,19 @@
         }
       }
 
+      // PVT-like: apply keyboard response to the active window (if configured for keyboard)
+      const pv = pvtLikeStates[activeWindowIndex];
+      if (pv && pv.started && !pv.ended && pv.cfg && pv.cfg.response_device === 'keyboard') {
+        const rkRaw = (pv.cfg.response_key ?? ' ').toString();
+        const isAll = rkRaw.trim().toUpperCase() === 'ALL_KEYS';
+        const rk = normalizeKeyName(rkRaw);
+        if (isAll || (rk && k === rk)) {
+          e.preventDefault();
+          consumed = true;
+          try { pv.respond?.('keyboard', k); } catch { /* ignore */ }
+        }
+      }
+
       // Only log raw key events for keys that weren't consumed by a task.
       if (!consumed) {
         events.push({ t_ms: Math.round(nowMs() - startTs), type: 'key', key: k });
@@ -3327,6 +3868,36 @@
                 mean_rt_ms: meanRt,
                 rule: st.current_rule ?? null,
                 rule_index: Number.isFinite(st.rule_index) ? st.rule_index : null
+              };
+            })
+            .filter(Boolean)
+          ,
+          pvt_like: pvtLikeStates
+            .map((st, idx) => {
+              if (!st) return null;
+              const rts = events
+                .filter((ev) => ev && ev.type === 'pvt_like_response' && ev.subtask_index === idx)
+                .map((ev) => ev.rt_ms)
+                .filter((v) => Number.isFinite(v));
+
+              const meanRt = rts.length ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : null;
+              const presented = Number(st.presented || 0);
+              const responded = Number(st.responded || 0);
+              const falseStarts = Number(st.false_starts || 0);
+              const timeouts = Number(st.timeouts || 0);
+              const accuracy = presented > 0 ? (responded / presented) : null;
+
+              return {
+                subtask_index: idx,
+                subtask_title: st.title ?? null,
+                started: !!st.started,
+                ended: !!st.ended,
+                presented,
+                responded,
+                false_starts: falseStarts,
+                timeouts,
+                accuracy,
+                mean_rt_ms: meanRt
               };
             })
             .filter(Boolean)

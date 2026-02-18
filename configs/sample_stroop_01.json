@@ -1,0 +1,59 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "stroop",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "stroop_settings": {
+    "stimuli": [
+      { "name": "RED", "color": "#ff0000" },
+      { "name": "GREEN", "color": "#00aa00" },
+      { "name": "BLUE", "color": "#0066ff" },
+      { "name": "YELLOW", "color": "#ffd200" }
+    ],
+    "response_mode": "color_naming",
+    "response_device": "keyboard",
+    "choice_keys": ["1", "2", "3", "4"],
+    "congruent_key": "f",
+    "incongruent_key": "j",
+    "stimulus_font_size_px": 72,
+    "stimulus_duration_ms": 0,
+    "trial_duration_ms": 2000,
+    "iti_ms": 500
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 760px; margin: 0 auto; text-align:left;\"><h2>Sample Stroop</h2><p><b>Color naming</b>: press 1–4 to choose the ink color.</p><p>This sample also includes a generated Block.</p><p>Press any key to begin.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "stroop-trial",
+      "word": "RED",
+      "ink_color_name": "GREEN",
+      "congruency": "auto",
+      "response_mode": "inherit",
+      "response_device": "inherit"
+    },
+    {
+      "type": "block",
+      "component_type": "stroop-trial",
+      "length": 12,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "word": ["RED", "GREEN", "BLUE", "YELLOW"],
+        "ink_color_name": ["RED", "GREEN", "BLUE", "YELLOW"],
+        "congruency": ["auto", "congruent", "incongruent"],
+        "response_mode": "inherit",
+        "response_device": "inherit"
+      },
+      "parameter_windows": [
+        { "parameter": "trial_duration_ms", "min": 1500, "max": 2500 },
+        { "parameter": "iti_ms", "min": 300, "max": 700 }
+      ]
+    }
+  ]
+}
