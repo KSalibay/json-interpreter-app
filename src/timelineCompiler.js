@@ -173,9 +173,216 @@
     };
   }
 
-  function expandBlock(block) {
-    const length = Math.max(1, Number.parseInt(block.length ?? 1, 10) || 1);
-    const baseType = (typeof block.component_type === 'string' && block.component_type.trim()) ? block.component_type : 'rdm-trial';
+  function hashSeedToUint32(seedStr) {
+    let h = 2166136261;
+    const s = (seedStr ?? 'default').toString();
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function parseNbackTokenPool(rawPool, stimulusMode) {
+    const raw = (rawPool ?? '').toString();
+    const parts = raw
+      .split(/[\n,]/g)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length > 0) return parts;
+
+    const mode = (stimulusMode ?? 'letters').toString().trim().toLowerCase();
+    if (mode === 'numbers') return ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    if (mode === 'shapes') return ['●', '■', '▲', '◆', '★', '⬟'];
+    if (mode === 'custom') return ['A', 'B', 'C'];
+    return ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  }
+
+  function expandNbackTrialSequence(seq, opts) {
+    const s = isObject(seq) ? seq : {};
+
+    const nbackDefaults = (opts && isObject(opts.nbackDefaults)) ? opts.nbackDefaults : {};
+    const pick = (k, fallback) => {
+      if (s[k] !== undefined && s[k] !== null) return s[k];
+      if (nbackDefaults && nbackDefaults[k] !== undefined && nbackDefaults[k] !== null) return nbackDefaults[k];
+      return fallback;
+    };
+    const resolveDevice = (raw) => {
+      const d = (raw ?? 'inherit').toString().trim().toLowerCase();
+      if (!d || d === 'inherit') {
+        const def = (nbackDefaults.response_device ?? 'keyboard').toString().trim().toLowerCase();
+        return (def === 'mouse' || def === 'keyboard') ? def : 'keyboard';
+      }
+      return (d === 'mouse' || d === 'keyboard') ? d : 'keyboard';
+    };
+
+    const n = Number.isFinite(Number(pick('n', 2))) ? Math.max(1, Math.floor(Number(pick('n', 2)))) : 2;
+    const length = Number.isFinite(Number(pick('length', 30))) ? Math.max(1, Math.floor(Number(pick('length', 30)))) : 30;
+
+    const seedStr = (typeof pick('seed', '') === 'string') ? pick('seed', '') : '';
+    const seed = hashSeedToUint32(seedStr || 'default');
+    const rng = mulberry32(seed);
+
+    const pool = parseNbackTokenPool(pick('stimulus_pool', ''), pick('stimulus_mode', 'letters'));
+    const targetProb = clamp(pick('target_probability', 0.25), 0, 1);
+
+    const responseParadigm = (pick('response_paradigm', 'go_nogo') || 'go_nogo').toString().trim().toLowerCase();
+    const responseDevice = resolveDevice(pick('response_device', 'inherit'));
+    const goKey = (pick('go_key', 'space') || 'space').toString();
+    const matchKey = (pick('match_key', 'j') || 'j').toString();
+    const nonmatchKey = (pick('nonmatch_key', 'f') || 'f').toString();
+    const showButtons = pick('show_buttons', false) === true;
+
+    const renderMode = (pick('render_mode', 'token') || 'token').toString().trim().toLowerCase();
+    const templateHtml = (renderMode === 'custom_html') ? (pick('stimulus_template_html', null) ?? null) : null;
+
+    const stimMs = pick('stimulus_duration_ms', undefined);
+    const isiMs = pick('isi_duration_ms', undefined);
+    const trialMs = pick('trial_duration_ms', undefined);
+
+    const showFeedback = pick('show_feedback', false) === true;
+    const feedbackMs = pick('feedback_duration_ms', undefined);
+
+    const showFixationCrossBetweenTrials = pick('show_fixation_cross_between_trials', false) === true;
+
+    const pickFromPool = (avoidToken) => {
+      if (!Array.isArray(pool) || pool.length === 0) return 'A';
+      if (!avoidToken || pool.length === 1) return pool[Math.floor(rng() * pool.length)];
+      let token = pool[Math.floor(rng() * pool.length)];
+      let guard = 0;
+      while (token === avoidToken && guard < 10) {
+        token = pool[Math.floor(rng() * pool.length)];
+        guard++;
+      }
+      return token;
+    };
+
+    const tokens = [];
+    const isMatch = [];
+    for (let i = 0; i < length; i++) {
+      if (i >= n && rng() < targetProb) {
+        tokens[i] = tokens[i - n];
+        isMatch[i] = true;
+      } else {
+        const avoid = (i >= n) ? tokens[i - n] : null;
+        tokens[i] = pickFromPool(avoid);
+        isMatch[i] = (i >= n) ? (tokens[i] === tokens[i - n]) : false;
+      }
+    }
+
+    const out = [];
+    for (let i = 0; i < length; i++) {
+      const m = isMatch[i] === true;
+
+      const correctResponse = (() => {
+        if (responseParadigm === '2afc') {
+          const mk = (s.match_key ?? '').toString().trim() ? matchKey : goKey;
+          return m ? mk : nonmatchKey;
+        }
+        return m ? goKey : null;
+      })();
+
+      out.push({
+        type: 'nback-block',
+        n,
+        token: tokens[i],
+        is_match: m,
+        correct_response: correctResponse,
+
+        response_paradigm: responseParadigm,
+        response_device: responseDevice,
+        go_key: goKey,
+        match_key: matchKey,
+        nonmatch_key: nonmatchKey,
+        show_buttons: showButtons,
+
+        render_mode: renderMode,
+        ...(templateHtml !== null && templateHtml !== undefined ? { stimulus_template_html: templateHtml } : {}),
+        ...(stimMs !== undefined ? { stimulus_duration_ms: stimMs } : {}),
+        ...(isiMs !== undefined ? { isi_duration_ms: isiMs } : {}),
+        ...(trialMs !== undefined ? { trial_duration_ms: trialMs } : {}),
+
+        ...(showFeedback ? { show_feedback: true } : {}),
+        ...(feedbackMs !== undefined ? { feedback_duration_ms: feedbackMs } : {}),
+
+        ...(showFixationCrossBetweenTrials ? { show_fixation_cross_between_trials: true } : {}),
+
+        _generated_from_nback_sequence: true,
+        _sequence_seed: seed,
+        _sequence_index: i
+      });
+    }
+
+    return out;
+  }
+
+  function expandBlock(block, opts) {
+    const length = Math.max(1, Number.parseInt(block.block_length ?? block.length ?? 1, 10) || 1);
+    const baseType = (typeof block.block_component_type === 'string' && block.block_component_type.trim())
+      ? block.block_component_type.trim()
+      : (typeof block.component_type === 'string' && block.component_type.trim())
+        ? block.component_type.trim()
+        : 'rdm-trial';
+
+    // N-back: treat Block as the generator (Builder UX).
+    if (baseType === 'nback-block') {
+      const src = (block && typeof block === 'object' && block.parameter_values && typeof block.parameter_values === 'object')
+        ? { ...block, ...block.parameter_values }
+        : (block || {});
+
+      const nbackDefaults = (opts && isObject(opts.nbackDefaults)) ? opts.nbackDefaults : {};
+      const pickFromDefaults = (raw, defKey, fallback) => {
+        if (raw !== undefined && raw !== null) return raw;
+        if (nbackDefaults && nbackDefaults[defKey] !== undefined && nbackDefaults[defKey] !== null) return nbackDefaults[defKey];
+        return fallback;
+      };
+      const resolveDevice = (raw) => {
+        const d = (raw ?? 'inherit').toString().trim().toLowerCase();
+        if (!d || d === 'inherit') {
+          const def = (nbackDefaults.response_device ?? 'keyboard').toString().trim().toLowerCase();
+          return (def === 'mouse' || def === 'keyboard') ? def : 'keyboard';
+        }
+        return (d === 'mouse' || d === 'keyboard') ? d : 'keyboard';
+      };
+
+      const renderMode = (pickFromDefaults(src.nback_render_mode, 'render_mode', 'token') ?? 'token').toString().trim().toLowerCase();
+
+      return expandNbackTrialSequence({
+        n: pickFromDefaults(src.nback_n, 'n', 2),
+        length,
+        seed: (pickFromDefaults(src.seed, 'seed', '') ?? '').toString(),
+        stimulus_mode: pickFromDefaults(src.nback_stimulus_mode, 'stimulus_mode', 'letters'),
+        stimulus_pool: pickFromDefaults(src.nback_stimulus_pool, 'stimulus_pool', ''),
+        target_probability: pickFromDefaults(src.nback_target_probability, 'target_probability', 0.25),
+
+        render_mode: renderMode,
+        stimulus_template_html: (renderMode === 'custom_html')
+          ? pickFromDefaults(src.nback_stimulus_template_html, 'stimulus_template_html', null)
+          : null,
+
+        stimulus_duration_ms: pickFromDefaults(src.nback_stimulus_duration_ms, 'stimulus_duration_ms', 500),
+        isi_duration_ms: pickFromDefaults(src.nback_isi_duration_ms, 'isi_duration_ms', 700),
+        trial_duration_ms: pickFromDefaults(src.nback_trial_duration_ms, 'trial_duration_ms', 1200),
+
+        show_fixation_cross_between_trials: (src.nback_show_fixation_cross_between_trials !== undefined && src.nback_show_fixation_cross_between_trials !== null)
+          ? (src.nback_show_fixation_cross_between_trials === true)
+          : (nbackDefaults.show_fixation_cross_between_trials === true),
+
+        response_paradigm: pickFromDefaults(src.nback_response_paradigm, 'response_paradigm', 'go_nogo'),
+        response_device: resolveDevice(pickFromDefaults(src.nback_response_device, 'response_device', 'inherit')),
+        go_key: pickFromDefaults(src.nback_go_key, 'go_key', 'space'),
+        match_key: pickFromDefaults(src.nback_match_key, 'match_key', 'j'),
+        nonmatch_key: pickFromDefaults(src.nback_nonmatch_key, 'nonmatch_key', 'f'),
+        show_buttons: (src.nback_show_buttons !== undefined && src.nback_show_buttons !== null)
+          ? src.nback_show_buttons
+          : (nbackDefaults.show_buttons ?? false),
+
+        show_feedback: (src.nback_show_feedback !== undefined && src.nback_show_feedback !== null)
+          ? src.nback_show_feedback
+          : (nbackDefaults.show_feedback ?? false),
+        feedback_duration_ms: pickFromDefaults(src.nback_feedback_duration_ms, 'feedback_duration_ms', 250)
+      });
+    }
 
     // Clone so we can safely delete block-level-only fields.
     // Builder exports parameter_windows as an array of { parameter, min, max }.
@@ -196,7 +403,8 @@
     })();
     const values = isObject(block.parameter_values) ? { ...block.parameter_values } : {};
 
-    const seed = Number.isFinite(block.seed) ? (block.seed >>> 0) : null;
+    const seedParsed = Number.parseInt((block.seed ?? '').toString(), 10);
+    const seed = Number.isFinite(seedParsed) ? (seedParsed >>> 0) : null;
     const rng = seed === null ? Math.random : mulberry32(seed);
 
     const sampleNumber = (min, max) => {
@@ -465,6 +673,16 @@
     for (const item of inTl) {
       if (!isObject(item)) continue;
 
+      if (item.type === 'nback-trial-sequence') {
+        const expandNback = opts && opts.expandNbackSequences === true;
+        if (expandNback) {
+          out.push(...expandNbackTrialSequence(item, opts));
+        } else {
+          out.push(item);
+        }
+        continue;
+      }
+
       if (item.type === 'block') {
         const baseType = (typeof item.component_type === 'string' && item.component_type.trim())
           ? item.component_type.trim()
@@ -475,7 +693,7 @@
         if (preserveFor.has(baseType)) {
           out.push(item);
         } else {
-          out.push(...expandBlock(item));
+          out.push(...expandBlock(item, opts));
         }
         continue;
       }
@@ -591,6 +809,16 @@
     const stroopDefaults = isObject(config.stroop_settings) ? config.stroop_settings : {};
     const simonDefaults = isObject(config.simon_settings) ? config.simon_settings : {};
     const pvtDefaults = isObject(config.pvt_settings) ? config.pvt_settings : {};
+    const nbackDefaults = isObject(config.nback_settings) ? config.nback_settings : {};
+
+    const resolveNbackResponseDevice = (raw) => {
+      const d = (raw ?? 'inherit').toString().trim().toLowerCase();
+      if (!d || d === 'inherit') {
+        const def = (nbackDefaults.response_device ?? 'keyboard').toString().trim().toLowerCase();
+        return (def === 'mouse' || def === 'keyboard') ? def : 'keyboard';
+      }
+      return (d === 'mouse' || d === 'keyboard') ? d : 'keyboard';
+    };
 
     const baseIti = (() => {
       const tp = isObject(config.timing_parameters) ? config.timing_parameters : {};
@@ -599,8 +827,16 @@
     })();
 
     const preservePvtBlocks = (pvtDefaults && pvtDefaults.add_trial_per_false_start === true);
+    const preserveNbackBlocks = (experimentType === 'continuous' && taskType === 'nback');
+    const preserveBlocksFor = [
+      ...(preservePvtBlocks ? ['pvt-trial'] : []),
+      ...(preserveNbackBlocks ? ['nback-block'] : [])
+    ];
+
     const expanded = expandTimeline(config.timeline, {
-      preserveBlocksForComponentTypes: preservePvtBlocks ? ['pvt-trial'] : []
+      preserveBlocksForComponentTypes: preserveBlocksFor,
+      expandNbackSequences: experimentType === 'trial-based',
+      nbackDefaults
     });
 
     const timeline = [];
@@ -876,10 +1112,77 @@
             ? item.block_component_type.trim()
             : '';
 
+        // N-back continuous: Block is the generator.
+        if (baseType === 'nback-block' && experimentType === 'continuous') {
+          const NbackContinuous = requirePlugin('nback-continuous (window.jsPsychNbackContinuous)', window.jsPsychNbackContinuous);
+          const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, 'nback-continuous');
+
+          const src = (item && typeof item === 'object' && item.parameter_values && typeof item.parameter_values === 'object')
+            ? { ...item, ...item.parameter_values }
+            : item;
+
+          const blockLen = Number.parseInt(src.block_length ?? src.length ?? 30, 10);
+          const len = Number.isFinite(blockLen) ? Math.max(1, blockLen) : 30;
+
+          const pickFromDefaults = (raw, defKey, fallback) => {
+            if (raw !== undefined && raw !== null) return raw;
+            if (nbackDefaults && nbackDefaults[defKey] !== undefined && nbackDefaults[defKey] !== null) return nbackDefaults[defKey];
+            return fallback;
+          };
+
+          const renderMode = (pickFromDefaults(src.nback_render_mode, 'render_mode', 'token') ?? 'token').toString().trim().toLowerCase();
+          const responseDevice = resolveNbackResponseDevice(pickFromDefaults(src.nback_response_device, 'response_device', 'inherit'));
+
+          timeline.push({
+            type: NbackContinuous,
+
+            n: pickFromDefaults(src.nback_n, 'n', 2),
+            length: len,
+            seed: (pickFromDefaults(src.seed, 'seed', '') ?? '').toString(),
+
+            stimulus_mode: pickFromDefaults(src.nback_stimulus_mode, 'stimulus_mode', 'letters'),
+            stimulus_pool: pickFromDefaults(src.nback_stimulus_pool, 'stimulus_pool', ''),
+            target_probability: pickFromDefaults(src.nback_target_probability, 'target_probability', 0.25),
+
+            render_mode: renderMode,
+            stimulus_template_html: (renderMode === 'custom_html')
+              ? pickFromDefaults(src.nback_stimulus_template_html, 'stimulus_template_html', null)
+              : null,
+
+            stimulus_duration_ms: pickFromDefaults(src.nback_stimulus_duration_ms, 'stimulus_duration_ms', 500),
+            isi_duration_ms: pickFromDefaults(src.nback_isi_duration_ms, 'isi_duration_ms', 700),
+            trial_duration_ms: pickFromDefaults(src.nback_trial_duration_ms, 'trial_duration_ms', 1200),
+
+            show_fixation_cross_between_trials: (src.nback_show_fixation_cross_between_trials !== undefined && src.nback_show_fixation_cross_between_trials !== null)
+              ? (src.nback_show_fixation_cross_between_trials === true)
+              : (nbackDefaults.show_fixation_cross_between_trials === true),
+
+            response_paradigm: pickFromDefaults(src.nback_response_paradigm, 'response_paradigm', 'go_nogo'),
+            response_device: responseDevice,
+            go_key: pickFromDefaults(src.nback_go_key, 'go_key', 'space'),
+            match_key: pickFromDefaults(src.nback_match_key, 'match_key', 'j'),
+            nonmatch_key: pickFromDefaults(src.nback_nonmatch_key, 'nonmatch_key', 'f'),
+            show_buttons: (src.nback_show_buttons !== undefined && src.nback_show_buttons !== null)
+              ? (src.nback_show_buttons === true)
+              : (nbackDefaults.show_buttons === true),
+
+            show_feedback: (src.nback_show_feedback !== undefined && src.nback_show_feedback !== null)
+              ? (src.nback_show_feedback === true)
+              : (nbackDefaults.show_feedback === true),
+            feedback_duration_ms: pickFromDefaults(src.nback_feedback_duration_ms, 'feedback_duration_ms', 250),
+
+            detection_response_task_enabled: src.detection_response_task_enabled === true,
+
+            ...(onFinish ? { on_finish: onFinish } : {}),
+            data: { plugin_type: 'nback-continuous', task_type: 'nback', original_type: type }
+          });
+          continue;
+        }
+
         if (baseType === 'pvt-trial' && pvtDefaults && pvtDefaults.add_trial_per_false_start === true) {
           const Pvt = requirePlugin('pvt (window.jsPsychPvt)', window.jsPsychPvt);
 
-          const targetValidTrials = Math.max(1, Number.parseInt(item.length ?? 1, 10) || 1);
+          const targetValidTrials = Math.max(1, Number.parseInt(item.block_length ?? item.length ?? 1, 10) || 1);
 
           // Builder exports parameter_windows as an array of { parameter, min, max }.
           // Support both object-map and array forms.
@@ -1334,6 +1637,61 @@
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
           ...(onFinish ? { on_finish: onFinish } : {}),
           data: { plugin_type: type, task_type: 'sart' }
+        });
+        continue;
+      }
+
+      // N-back task (trial-based)
+      if (type === 'nback-block') {
+        const Nback = requirePlugin('nback (window.jsPsychNback)', window.jsPsychNback);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
+
+        const itemCopy = { ...item };
+        if ('response_device' in itemCopy) itemCopy.response_device = resolveNbackResponseDevice(itemCopy.response_device);
+        const rm = (itemCopy.render_mode ?? 'token').toString().trim().toLowerCase();
+        itemCopy.render_mode = rm;
+        if (rm !== 'custom_html') delete itemCopy.stimulus_template_html;
+
+        timeline.push({
+          ...itemCopy,
+          type: Nback,
+          ...(onFinish ? { on_finish: onFinish } : {}),
+          data: {
+            plugin_type: type,
+            task_type: 'nback',
+            _generated_from_nback_sequence: item._generated_from_nback_sequence === true,
+            _sequence_seed: Number.isFinite(item._sequence_seed) ? item._sequence_seed : null,
+            _sequence_index: Number.isFinite(item._sequence_index) ? item._sequence_index : null
+          }
+        });
+        continue;
+      }
+
+      // N-back task (continuous stream)
+      if (type === 'nback-trial-sequence' && experimentType === 'continuous') {
+        const NbackContinuous = requirePlugin('nback-continuous (window.jsPsychNbackContinuous)', window.jsPsychNbackContinuous);
+        const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, 'nback-continuous');
+
+        const itemCopy = { ...item };
+        delete itemCopy.type;
+        delete itemCopy.on_start;
+        delete itemCopy.on_finish;
+
+        // Apply experiment-wide N-back defaults when fields are missing.
+        for (const [k, v] of Object.entries(nbackDefaults || {})) {
+          if (itemCopy[k] === undefined || itemCopy[k] === null) itemCopy[k] = v;
+        }
+
+        itemCopy.response_device = resolveNbackResponseDevice(itemCopy.response_device);
+        const renderMode = (itemCopy.render_mode ?? 'token').toString().trim().toLowerCase();
+        itemCopy.render_mode = renderMode;
+        if (renderMode !== 'custom_html') delete itemCopy.stimulus_template_html;
+
+        timeline.push({
+          type: NbackContinuous,
+          ...itemCopy,
+          ...(onFinish ? { on_finish: onFinish } : {}),
+          data: { plugin_type: 'nback-continuous', task_type: 'nback', original_type: type }
         });
         continue;
       }

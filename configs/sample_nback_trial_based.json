@@ -1,0 +1,36 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "nback",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": false,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 760px; margin: 0 auto; text-align:left;\"><h2>Sample N-back (Trial-based)</h2><p>Press <b>J</b> for <b>MATCH</b> and <b>F</b> for <b>NO MATCH</b>.</p><p>Press any key to begin.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "nback-trial-sequence",
+      "n": 2,
+      "length": 24,
+      "seed": "sample_nback_trial_based",
+      "stimulus_mode": "letters",
+      "stimulus_pool": "A,B,C,D,E,F,G,H",
+      "render_mode": "token",
+      "stimulus_duration_ms": 500,
+      "isi_duration_ms": 500,
+      "trial_duration_ms": 1000,
+      "response_paradigm": "2afc",
+      "response_device": "keyboard",
+      "match_key": "j",
+      "nonmatch_key": "f",
+      "target_probability": 0.3,
+      "show_feedback": true,
+      "feedback_duration_ms": 250
+    }
+  ]
+}

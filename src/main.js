@@ -505,7 +505,7 @@
 
         delayedEyeDownload = () => downloadTextFile(
           JSON.stringify(payload, null, 2),
-          `psychjson-eye-tracking-${safeId}-${stamp}.json`,
+          `cogflow-eye-tracking-${safeId}-${stamp}.json`,
           'application/json'
         );
       }
@@ -516,7 +516,7 @@
     if (fmt === 'json') {
       const values = Array.isArray(overrideValues) ? overrideValues : getJsPsychValues(jsPsych);
       const dataJson = JSON.stringify(values, null, 2);
-      const ok = downloadTextFile(dataJson, `psychjson-data-${safeId}-${stamp}.json`, 'application/json');
+      const ok = downloadTextFile(dataJson, `cogflow-data-${safeId}-${stamp}.json`, 'application/json');
       if (typeof delayedEyeDownload === 'function') setTimeout(delayedEyeDownload, 250);
       return ok;
     }
@@ -527,7 +527,7 @@
     const values = Array.isArray(overrideValues) ? overrideValues : getJsPsychValues(jsPsych);
     const expanded = expandJsPsychRowsForCsv(values);
     const dataCsv = rowsToCsv(expanded);
-    const ok = downloadTextFile(dataCsv, `psychjson-data-${safeId}-${stamp}.csv`, 'text/csv');
+    const ok = downloadTextFile(dataCsv, `cogflow-data-${safeId}-${stamp}.csv`, 'text/csv');
     if (typeof delayedEyeDownload === 'function') setTimeout(delayedEyeDownload, 250);
     return ok;
   }

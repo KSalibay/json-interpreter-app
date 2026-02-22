@@ -9,6 +9,8 @@
     "sample_adaptive_rdm_staircase.json",
     "sample_continuous.json",
     "sample_continuous_dot_groups.json",
+    "sample_nback_continuous.json",
+    "sample_nback_trial_based.json",
     "sample_pvt_01.json",
     "sample_simon_01.json",
     "sample_stroop_01.json",

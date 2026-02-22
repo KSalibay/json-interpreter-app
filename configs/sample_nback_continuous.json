@@ -1,0 +1,35 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "nback",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": false,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 760px; margin: 0 auto; text-align:left;\"><h2>Sample N-back (Continuous stream)</h2><p>Press <b>SPACE</b> when the current item matches the one from <b>2-back</b>.</p><p>Press any key to begin.</p></div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "block",
+      "block_component_type": "nback-block",
+      "block_length": 30,
+      "seed": "sample_nback_continuous",
+      "nback_n": 2,
+      "nback_stimulus_mode": "shapes",
+      "nback_stimulus_pool": "●,■,▲,◆,★,⬟",
+      "nback_target_probability": 0.25,
+      "nback_render_mode": "token",
+      "nback_stimulus_duration_ms": 500,
+      "nback_isi_duration_ms": 400,
+      "nback_trial_duration_ms": 900,
+      "nback_response_paradigm": "go_nogo",
+      "nback_response_device": "keyboard",
+      "nback_go_key": "space",
+      "nback_show_feedback": false
+    }
+  ]
+}

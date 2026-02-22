@@ -1,6 +1,21 @@
-# JSON Interpreter App (JATOS/jsPsych runtime)
+<p align="center">
+  <img src="img/logo_dark.png" alt="CogFlow" width="280" />
+</p>
 
-Static runtime that loads a PsychJSON Builder export and runs it via jsPsych.
+# CogFlow Interpreter App (JATOS/jsPsych runtime)
+
+Static runtime that loads a CogFlow Builder export and runs it via jsPsych.
+
+## Repositories
+
+- Interpreter repo: https://github.com/KSalibay/json-interpreter-app
+- Builder repo: https://github.com/KSalibay/json-builder-app
+
+## Recent highlights (Feb 2026)
+
+- N-back support added end-to-end (compilation + runtime rendering) for both **trial-based** and **continuous** N-back exports.
+- Fixation cross support added as an ITI visual marker via `show_fixation_cross_between_trials`.
+- UI/theming improvements aligned with the CogFlow palette and typography updates (to match Builder exports and improve readability).
 
 ## How it loads configs
 
@@ -36,7 +51,7 @@ Debugging (local):
 - Add `&debug=1` to auto-download the jsPsych data CSV on finish.
   - Example: `.../index.html?id=ABC1234&debug=1`
 - Optional: `&debug=json` to download JSON instead.
-  - If eye tracking is enabled, debug mode also downloads a second gaze-only JSON file: `psychjson-eye-tracking-...json`.
+  - If eye tracking is enabled, debug mode also downloads a second gaze-only JSON file: `cogflow-eye-tracking-...json`.
   - Debug mode also shows an on-screen eye-tracking HUD (when eye tracking is enabled) to confirm that samples are accumulating.
 
 Validation (local):
@@ -147,19 +162,22 @@ SOC Dashboard data is written into the trial’s `events` array. Key event types
 
 ## Trial-based tasks (Feb 2026)
 
-The interpreter includes additional jsPsych plugins for trial-based tasks compiled from PsychJSON Builder exports.
+The interpreter includes additional jsPsych plugins for trial-based tasks compiled from CogFlow Builder exports.
 
 ### Included sample configs
 
 - Stroop: `.../index.html?id=sample_stroop_01&debug=1`
 - Simon: `.../index.html?id=sample_simon_01&debug=1`
 - PVT: `.../index.html?id=sample_pvt_01&debug=1`
+- N-back (trial-based): `.../index.html?id=sample_nback_trial_based&debug=1`
+- N-back (continuous): `.../index.html?id=sample_nback_continuous&debug=1`
 
 ### Component types
 
 - `stroop-trial` (plugin: `src/jspsych-stroop.js`)
 - `simon-trial` (plugin: `src/jspsych-simon.js`)
 - `pvt-trial` (plugin: `src/jspsych-pvt.js`)
+- `nback-block` (plugins: `src/jspsych-nback.js` for trial-based, `src/jspsych-nback-continuous.js` for continuous)
 
 ### Experiment-wide defaults
 
@@ -168,6 +186,7 @@ Builder exports task-specific defaults at the top level (merged into each trial 
 - `stroop_settings`
 - `simon_settings`
 - `pvt_settings`
+- `nback_settings`
 
 ### PVT blocks and false-start compensation
 

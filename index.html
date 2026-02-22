@@ -3,43 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PsychJSON Interpreter</title>
+  <title>CogFlow Interpreter</title>
 
   <link rel="icon" href="data:," />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
   <!-- jsPsych v8 -->
   <link href="https://unpkg.com/jspsych@8.2.3/css/jspsych.css" rel="stylesheet" />
 
   <style>
     :root {
-      --psy-font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      --psy-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+
+      /* CogFlow palette */
+      --cf-ash-grey: #BAC7BE;
+      --cf-lilac-ash: #AE8CA3;
+      --cf-olive-wood: #7B6B43;
+      --cf-twilight-indigo: #3A405A;
+      --cf-space-indigo: #30334A;
+      --cf-deep-walnut: #3F3221;
 
       /* Default theme (dark) */
-      --psy-bg: #0b0b0b;
-      --psy-fg: rgba(255, 255, 255, 0.88);
-      --psy-fg-strong: rgba(255, 255, 255, 0.92);
-      --psy-muted: rgba(255, 255, 255, 0.75);
-      --psy-border: rgba(255, 255, 255, 0.14);
-      --psy-surface: rgba(255, 255, 255, 0.06);
-      --psy-shadow: 0 14px 50px rgba(0, 0, 0, 0.45);
-      --psy-accent: #ff3b3b;
+      --psy-bg: var(--cf-space-indigo);
+      --psy-fg: rgba(186, 199, 190, 0.90);
+      --psy-fg-strong: rgba(186, 199, 190, 0.96);
+      --psy-muted: rgba(186, 199, 190, 0.78);
+      --psy-border: rgba(186, 199, 190, 0.18);
+      --psy-surface: rgba(58, 64, 90, 0.55);
+      --psy-shadow: 0 14px 50px rgba(15, 18, 30, 0.55);
+      --psy-accent: var(--cf-lilac-ash);
 
       /* Some tasks (e.g., canvas-based) may prefer a fixed dark stage */
-      --psy-task-bg: #0b0b0b;
+      --psy-task-bg: var(--cf-space-indigo);
     }
 
     html[data-psy-theme="light"] {
-      --psy-bg: #f7f7f8;
-      --psy-fg: rgba(17, 17, 17, 0.92);
-      --psy-fg-strong: rgba(17, 17, 17, 0.98);
-      --psy-muted: rgba(17, 17, 17, 0.70);
-      --psy-border: rgba(17, 17, 17, 0.14);
-      --psy-surface: rgba(17, 17, 17, 0.04);
-      --psy-shadow: 0 14px 50px rgba(0, 0, 0, 0.16);
-      --psy-accent: #d91c1c;
+      --psy-bg: #f6f7f7;
+      --psy-fg: rgba(35, 39, 66, 0.92);
+      --psy-fg-strong: rgba(35, 39, 66, 0.98);
+      --psy-muted: rgba(35, 39, 66, 0.72);
+      --psy-border: rgba(35, 39, 66, 0.16);
+      --psy-surface: rgba(186, 199, 190, 0.45);
+      --psy-shadow: 0 14px 50px rgba(35, 39, 66, 0.18);
+      --psy-accent: var(--cf-twilight-indigo);
 
       /* Keep some tasks dark by default even in light UI mode */
-      --psy-task-bg: #0b0b0b;
+      --psy-task-bg: var(--cf-space-indigo);
     }
 
     html, body {
@@ -152,9 +164,9 @@
       cursor: pointer;
     }
     .psy-btn-primary {
-      background: #0ea5e9;
+      background: var(--psy-accent);
       border-color: rgba(0, 0, 0, 0.0);
-      color: #fff;
+      color: var(--cf-ash-grey);
     }
 
     @keyframes socPromptFlash {
@@ -245,6 +257,8 @@
   <script src="src/jspsych-stroop.js?v=20260218d"></script>
   <script src="src/jspsych-simon.js?v=20260218"></script>
   <script src="src/jspsych-pvt.js?v=20260219"></script>
+  <script src="src/jspsych-nback.js?v=20260222"></script>
+  <script src="src/jspsych-nback-continuous.js?v=20260222"></script>
   <script src="src/jspsych-visual-angle-calibration.js?v=20260210"></script>
   <script src="src/jspsych-soc-dashboard.js?v=20260218b"></script>
   <script src="src/eyeTrackingWebgazer.js?v=20260207"></script>
