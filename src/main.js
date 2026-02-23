@@ -1,9 +1,58 @@
 (function () {
+  try {
+    window.__COGFLOW_INTERPRETER_VERSION = '20260223-16';
+    console.log('[Interpreter] main.js loaded', window.__COGFLOW_INTERPRETER_VERSION);
+  } catch {
+    // ignore
+  }
+
+  function getJatosApi() {
+    // JATOS' jatos.js defines `const jatos = {}` in the global lexical scope.
+    // That does NOT become `window.jatos`, so we must detect it via `typeof jatos`.
+    try {
+      // eslint-disable-next-line no-undef
+      if (typeof jatos !== 'undefined' && jatos) {
+        // eslint-disable-next-line no-undef
+        return jatos;
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof window.jatos !== 'undefined' && window.jatos) return window.jatos;
+    } catch {
+      // ignore
+    }
+    try {
+      if (window.parent && window.parent !== window && typeof window.parent.jatos !== 'undefined' && window.parent.jatos) return window.parent.jatos;
+    } catch {
+      // ignore
+    }
+    try {
+      if (window.top && window.top !== window && typeof window.top.jatos !== 'undefined' && window.top.jatos) return window.top.jatos;
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   const els = {
     jatosStatus: document.getElementById('jatosStatus'),
     statusBox: document.getElementById('statusBox'),
     jspsychTarget: document.getElementById('jspsych-target')
   };
+
+  try {
+    const p = (window.location && typeof window.location.pathname === 'string') ? window.location.pathname : '';
+    if (p.includes('/publix/')) {
+      const host = els.jspsychTarget || document.getElementById('jspsych-target');
+      if (host && !host.innerHTML) {
+        host.innerHTML = '<div style="padding:16px;opacity:0.85;font-family:system-ui;">Initializing interpreter…</div>';
+      }
+    }
+  } catch {
+    // ignore
+  }
 
   function getUiThemeFromConfig(config) {
     try {
@@ -39,10 +88,310 @@
     `;
   }
 
-  function getDebugMode() {
+  function getInlineConfigJson() {
+    // Allows running without JATOS API access: paste the full config JSON into the component HTML.
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.COGFLOW_COMPONENT_CONFIG && typeof window.COGFLOW_COMPONENT_CONFIG === 'object') {
+          return window.COGFLOW_COMPONENT_CONFIG;
+        }
+        if (typeof window.COGFLOW_COMPONENT_CONFIG_JSON === 'string' && window.COGFLOW_COMPONENT_CONFIG_JSON.trim()) {
+          try {
+            return JSON.parse(window.COGFLOW_COMPONENT_CONFIG_JSON);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const el = document.getElementById('cogflow_component_config_json');
+      if (!el) return null;
+      const txt = (el.textContent || '').trim();
+      if (!txt) return null;
+      return JSON.parse(txt);
+    } catch {
+      return null;
+    }
+  }
+
+  function renderBlockingStatus(title, message) {
+    try {
+      const host = els.jspsychTarget || document.getElementById('jspsych-target') || document.body;
+      if (!host) return;
+      const t = escapeHtml(String(title || 'Interpreter'));
+      const m = escapeHtml(String(message || ''));
+      host.innerHTML = wrapPsyScreenHtml(
+        `<h2>${t}</h2><div class="psy-muted" style="margin-top: 10px;">${m}</div>`,
+        null
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  function listJatosTokenStoreKeys() {
+    const interesting = (k) => {
+      const s = (k ?? '').toString().toLowerCase();
+      return s.startsWith('config_store_') || s.startsWith('token_store_') || s === 'config_store_base_url' || s === 'token_store_base_url';
+    };
+
+    const out = { urlQuery: [], studySessionData: [], componentProperties: [], componentJsonInput: [] };
+
+    try {
+      const qp = getJatosUrlQueryParameters();
+      if (qp && typeof qp === 'object') {
+        out.urlQuery = Object.keys(qp).filter(interesting).sort();
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const j = getJatosApi();
+      if (j && j.studySessionData && typeof j.studySessionData === 'object') {
+        out.studySessionData = Object.keys(j.studySessionData).filter(interesting).sort();
+      }
+      if (j && j.componentProperties && typeof j.componentProperties === 'object') {
+        out.componentProperties = Object.keys(j.componentProperties).filter(interesting).sort();
+      }
+      const input = j ? j.componentJsonInput : null;
+      if (typeof input === 'string' && input.trim()) {
+        try {
+          const parsed = JSON.parse(input);
+          if (parsed && typeof parsed === 'object') {
+            out.componentJsonInput = Object.keys(parsed).filter(interesting).sort();
+          }
+        } catch {
+          // ignore
+        }
+      } else if (input && typeof input === 'object') {
+        out.componentJsonInput = Object.keys(input).filter(interesting).sort();
+      }
+    } catch {
+      // ignore
+    }
+
+    return out;
+  }
+
+  async function submitToJatosAndContinue(dataJson) {
+    const j = getJatosApi();
+    if (!j || typeof j.submitResultData !== 'function') return false;
+
+    try {
+      await j.submitResultData(dataJson);
+
+      // Prefer advancing the study; fall back to ending it.
+      if (typeof j.startNextComponent === 'function') {
+        j.startNextComponent();
+      } else if (typeof j.endStudyAjax === 'function') {
+        j.endStudyAjax(true);
+      } else if (typeof j.endStudy === 'function') {
+        j.endStudy(true);
+      }
+      return true;
+    } catch (e) {
+      console.error('JATOS submit failed:', e);
+      setStatus(`JATOS submit failed: ${e && e.message ? e.message : String(e)}`);
+      renderBlockingStatus('JATOS submit failed', e && e.message ? e.message : String(e));
+      return true;
+    }
+  }
+
+  function sanitizeFilenamePart(x) {
+    return String(x || '')
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Za-z0-9._-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80);
+  }
+
+  function buildResultFilename({ configId, code }) {
+    const stamp = formatTimestampForFilename(new Date());
+    const tag = sanitizeFilenamePart(code || configId || 'run') || 'run';
+    return `cogflow-results-${tag}-${stamp}.json`;
+  }
+
+  async function tryUploadResultFileToJatos({ filename, jsonText }) {
+    const j = getJatosApi();
+    if (!j || typeof j.uploadResultFile !== 'function') return { ok: false, reason: 'uploadResultFile_unavailable' };
+
+    const safeName = sanitizeFilenamePart(filename);
+    const outName = safeName.toLowerCase().endsWith('.json') ? safeName : `${safeName}.json`;
+    const text = (jsonText || '').toString();
+
+    let fileObj = null;
+    try {
+      fileObj = new File([text], outName, { type: 'application/json' });
+    } catch {
+      // Older browsers may not support File constructor; Blob should still work with JATOS.
+      try {
+        const blob = new Blob([text], { type: 'application/json' });
+        blob.name = outName;
+        fileObj = blob;
+      } catch {
+        fileObj = null;
+      }
+    }
+
+    if (!fileObj) return { ok: false, reason: 'file_construct_failed' };
+
+    try {
+      // JATOS supports uploadResultFile(file, filename)
+      const res = await j.uploadResultFile(fileObj, outName);
+      return { ok: true, result: res, filename: outName, size: text.length };
+    } catch (e) {
+      console.warn('JATOS uploadResultFile failed:', e);
+      return { ok: false, reason: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  function buildResultPayload({ values, config, compiled, configId, code }) {
+    const trials = Array.isArray(values) ? values : [];
+    const cfgId = (typeof configId === 'string' && configId.trim()) ? configId.trim() : null;
+    const taskType = (config && config.task_type) ? String(config.task_type) : (compiled && compiled.taskType ? String(compiled.taskType) : null);
+    const experimentType = (config && config.experiment_type)
+      ? String(config.experiment_type)
+      : (compiled && compiled.experimentType ? String(compiled.experimentType) : null);
+
+    return {
+      format: 'cogflow-jatos-result-v1',
+      created_at: new Date().toISOString(),
+      export_code: (code === undefined || code === null) ? null : String(code),
+      config_id: cfgId,
+      task_type: taskType,
+      experiment_type: experimentType,
+      trial_count: trials.length,
+      trials
+    };
+  }
+
+  function buildResultSummary({ payload, uploadedFile }) {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    const f = uploadedFile && uploadedFile.ok === true ? uploadedFile : null;
+    return {
+      format: 'cogflow-jatos-result-summary-v1',
+      created_at: p.created_at || new Date().toISOString(),
+      export_code: p.export_code ?? null,
+      config_id: p.config_id ?? null,
+      task_type: p.task_type ?? null,
+      experiment_type: p.experiment_type ?? null,
+      trial_count: p.trial_count ?? null,
+      result_file: f ? {
+        filename: f.filename || null,
+        mime: 'application/json'
+      } : null
+    };
+  }
+
+  function getJatosUrlQueryParameters() {
+    try {
+      const j = getJatosApi();
+      const qp = j && j.urlQueryParameters;
+      if (qp && typeof qp === 'object') return qp;
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  function getJatosParam(name) {
+    const key = (name ?? '').toString();
+    if (!key) return null;
+
+    try {
+      const qp = getJatosUrlQueryParameters();
+      if (qp && Object.prototype.hasOwnProperty.call(qp, key)) {
+        const v = qp[key];
+        return (v === undefined || v === null) ? null : String(v);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const j = getJatosApi();
+      if (!j) return null;
+
+      const readFromObj = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (!Object.prototype.hasOwnProperty.call(obj, key)) return null;
+        const v = obj[key];
+        return (v === undefined || v === null) ? null : String(v);
+      };
+
+      // Persisted per-study-run values.
+      const fromSession = readFromObj(j.studySessionData);
+      if (fromSession != null) return fromSession;
+
+      // Configured per component in the JATOS GUI.
+      const fromProps = readFromObj(j.componentProperties);
+      if (fromProps != null) return fromProps;
+
+      // JSON input can be a string or an object.
+      const input = j.componentJsonInput;
+      if (typeof input === 'string' && input.trim()) {
+        try {
+          const parsed = JSON.parse(input);
+          const fromInput = readFromObj(parsed);
+          if (fromInput != null) return fromInput;
+        } catch {
+          // ignore
+        }
+      } else if (input && typeof input === 'object') {
+        const fromInput = readFromObj(input);
+        if (fromInput != null) return fromInput;
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
+  }
+
+  function getQueryParam(name) {
+    const key = (name ?? '').toString();
+    if (!key) return null;
+
+    // Prefer JATOS sources (works even when URL params are stripped by redirects).
+    try {
+      const v = getJatosParam(key);
+      if (v != null) return v;
+    } catch {
+      // ignore
+    }
+
+    // Fallback: normal URL query string.
     try {
       const params = new URLSearchParams(window.location.search);
-      const v = (params.get('debug') || '').toString().trim().toLowerCase();
+      if (params.has(key)) return params.get(key);
+    } catch {
+      // ignore
+    }
+
+    // Fallback: hash query (e.g. #/route?foo=bar)
+    try {
+      const h = (window.location && typeof window.location.hash === 'string') ? window.location.hash : '';
+      const idx = h.indexOf('?');
+      if (idx >= 0) {
+        const params = new URLSearchParams(h.slice(idx + 1));
+        if (params.has(key)) return params.get(key);
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
+  }
+
+  function getDebugMode() {
+    try {
+      const v = (getQueryParam('debug') || '').toString().trim().toLowerCase();
       return v === '1' || v === 'true' || v === 'yes' || v === 'csv' || v === 'json';
     } catch {
       return false;
@@ -51,8 +400,7 @@
 
   function getDebugFormat() {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const v = (params.get('debug') || '').toString().trim().toLowerCase();
+      const v = (getQueryParam('debug') || '').toString().trim().toLowerCase();
       if (v === 'csv') return 'csv';
       if (v === 'json' || v === '1' || v === 'true' || v === 'yes') return 'json';
       // Default to JSON when debug is enabled (best for nested fields like events[]).
@@ -64,8 +412,7 @@
 
   function getValidateMode() {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const v = (params.get('validate') || '').toString().trim().toLowerCase();
+      const v = (getQueryParam('validate') || '').toString().trim().toLowerCase();
       if (!v) return false;
       if (v === 'only') return 'only';
       return v === '1' || v === 'true' || v === 'yes' ? true : false;
@@ -442,6 +789,35 @@
     }
   }
 
+  function consumeBufferedDrtRows() {
+    try {
+      const rows = Array.isArray(window.__psy_drt_rows) ? window.__psy_drt_rows.slice() : [];
+      window.__psy_drt_rows = [];
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+
+  function stampExportRow(row, config, compiled, configId) {
+    if (!row || typeof row !== 'object') return row;
+
+    try {
+      const taskType = (config && config.task_type ? String(config.task_type) : 'task');
+      const experimentType = (config && config.experiment_type ? String(config.experiment_type) : (compiled && compiled.experimentType ? String(compiled.experimentType) : 'trial-based'));
+      const cfgId = (typeof configId === 'string' && configId.trim()) ? configId.trim() : null;
+
+      // Only add fields if missing to avoid clobbering values.
+      if (row.task_type == null) row.task_type = taskType;
+      if (row.experiment_type == null) row.experiment_type = experimentType;
+      if (row.config_id == null) row.config_id = cfgId;
+    } catch {
+      // ignore
+    }
+
+    return row;
+  }
+
   function tryPersistEyeTrackingToJsPsych(jsPsych, eyePayload) {
     // jsPsych v8 doesn't support writing arbitrary rows via data.write.
     // Some versions expose addToLast on the DataCollection returned by data.get().
@@ -634,7 +1010,7 @@
   }
 
   function detectJatos() {
-    const ok = typeof window.jatos !== 'undefined' && window.jatos && typeof window.jatos.onLoad === 'function';
+    const ok = !!getJatosApi();
     if (els.jatosStatus) {
       els.jatosStatus.textContent = ok ? 'JATOS: detected' : 'JATOS: not detected (local mode)';
     }
@@ -642,39 +1018,103 @@
   }
 
   async function ensureJatosLoaded() {
-    if (typeof window.jatos !== 'undefined' && window.jatos) return true;
+    const isJatosPresent = () => {
+      try {
+        return !!getJatosApi();
+      } catch {
+        return false;
+      }
+    };
 
-    const host = (window.location && window.location.hostname) ? window.location.hostname : '';
-    const proto = (window.location && window.location.protocol) ? window.location.protocol : '';
-    const isLocal =
-      proto === 'file:' ||
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '::1';
+    const isJatosReady = () => {
+      try {
+        const j = getJatosApi();
+        if (!j) return false;
+        if (typeof j.onLoad === 'function') return true;
+        // Some builds expose the API without onLoad; treat it as ready enough.
+        if (j.componentProperties && typeof j.componentProperties === 'object') return true;
+        if (j.studySessionData && typeof j.studySessionData === 'object') return true;
+        if (j.urlQueryParameters && typeof j.urlQueryParameters === 'object') return true;
+        return false;
+      } catch {
+        return false;
+      }
+    };
 
-    if (isLocal) {
-      return false;
-    }
+    const probablyPublix = (() => {
+      try {
+        return typeof window.location?.pathname === 'string' && window.location.pathname.includes('/publix/');
+      } catch {
+        return false;
+      }
+    })();
 
-    // Avoid noisy "Refused to execute script ... MIME type text/html" in local mode.
-    // Probe first; only attach <script> if it looks like real JS.
+    if (isJatosReady()) return true;
+
+    const waitForJatos = async (ms) => {
+      const deadline = Date.now() + Math.max(0, Number(ms) || 0);
+      while (Date.now() < deadline) {
+        try {
+          if (isJatosReady()) return true;
+        } catch {
+          // ignore
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      try {
+        return isJatosReady();
+      } catch {
+        return false;
+      }
+    };
+
+    // If JATOS already injected the script tag, don't add another one.
     try {
-      const res = await fetch('/jatos.js', { method: 'HEAD', cache: 'no-store' });
-      if (!res.ok) return false;
-      const ct = (res.headers.get('content-type') || '').toLowerCase();
-      if (!ct.includes('javascript')) return false;
+      const existing = document.querySelector('script[src*="jatos.js"]');
+      if (existing) {
+        // If a script tag exists (ours or JATOS'), wait a bit for it to execute.
+        const ok = await waitForJatos(probablyPublix ? 15000 : 3000);
+        return ok;
+      }
     } catch {
-      return false;
+      // ignore
     }
 
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = '/jatos.js';
-      script.async = true;
-      script.onload = () => resolve(typeof window.jatos !== 'undefined' && !!window.jatos);
-      script.onerror = () => resolve(false);
-      document.head.appendChild(script);
-    });
+    // Try to inject JATOS API script (some setups do not auto-inject it into component HTML).
+    const tryInject = async (src) => {
+      try {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        const loaded = await new Promise((resolve) => {
+          script.onload = () => resolve(true);
+          script.onerror = () => resolve(false);
+          document.head.appendChild(script);
+        });
+        if (!loaded) return false;
+        return await waitForJatos(probablyPublix ? 8000 : 2000);
+      } catch {
+        return false;
+      }
+    };
+
+    const injectCandidates = [
+      '/assets/javascripts/jatos.js',
+      '/jatos.js',
+      '/jatos/assets/javascripts/jatos.js',
+      '/jatos/jatos.js'
+    ];
+    for (const src of injectCandidates) {
+      if (await tryInject(src)) return true;
+      // If the API became present but isn't "ready" by our heuristic yet, keep waiting.
+      if (isJatosPresent()) {
+        const ok = await waitForJatos(probablyPublix ? 8000 : 1500);
+        if (ok) return true;
+      }
+    }
+
+    // Last resort: wait briefly in case something else injects it.
+    return await waitForJatos(probablyPublix ? 8000 : 1500);
   }
 
   function generateCalibrationPoints(count) {
@@ -1032,6 +1472,14 @@
       display_element: displayEl,
       on_finish: async () => {
         try {
+          if (window.DrtEngine && typeof window.DrtEngine.stop === 'function') {
+            window.DrtEngine.stop();
+          }
+        } catch {
+          // ignore
+        }
+
+        try {
           if (eyeHud && typeof eyeHud.stop === 'function') eyeHud.stop();
         } catch {
           // ignore
@@ -1105,38 +1553,43 @@
         }
 
         const baseValues = getJsPsychValues(jsPsych);
-        const finalValues = eyeTrackingExtraRow ? baseValues.concat([eyeTrackingExtraRow]) : baseValues;
-        const dataJson = JSON.stringify(finalValues);
+        const bufferedDrt = consumeBufferedDrtRows().map((r) => stampExportRow(r, config, compiled, configId));
 
-        if (typeof window.jatos !== 'undefined' && window.jatos && typeof window.jatos.submitResultData === 'function') {
-          try {
-            await window.jatos.submitResultData(dataJson);
-            if (typeof window.jatos.endStudyAjax === 'function') {
-              window.jatos.endStudyAjax(true);
-            } else if (typeof window.jatos.endStudy === 'function') {
-              window.jatos.endStudy(true);
-            }
-            return;
-          } catch (e) {
-            console.error('JATOS submit failed:', e);
-            setStatus(`JATOS submit failed: ${e && e.message ? e.message : String(e)}`);
-          }
-        }
+        let finalValues = baseValues;
+        if (bufferedDrt.length) finalValues = finalValues.concat(bufferedDrt);
+        if (eyeTrackingExtraRow) finalValues = finalValues.concat([stampExportRow(eyeTrackingExtraRow, config, compiled, configId)]);
+
+        const payload = buildResultPayload({ values: finalValues, config, compiled, configId, code: null });
+        const payloadJson = JSON.stringify(payload, null, 2);
+
+        // Prefer uploading a result file so researchers/students don't need to copy/paste large JSON.
+        const uploadAttempt = await tryUploadResultFileToJatos({
+          filename: buildResultFilename({ configId, code: null }),
+          jsonText: payloadJson
+        });
+
+        const dataJson = (uploadAttempt && uploadAttempt.ok === true)
+          ? JSON.stringify(buildResultSummary({ payload, uploadedFile: uploadAttempt }), null, 2)
+          : payloadJson;
+
+        if (await submitToJatosAndContinue(dataJson)) return;
 
         // Local debug: optionally auto-download the exact payload that would be sent to JATOS.
         if (getDebugMode()) {
-          const params = new URLSearchParams(window.location.search);
-          const id = (params.get('id') || 'local').toString().trim() || 'local';
+          const id = (getQueryParam('id') || 'local').toString().trim() || 'local';
           downloadDebugData(jsPsych, id, finalValues);
         }
 
-        // Always show a local completion screen (prevents "blank page" confusion).
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const id = (params.get('id') || 'local').toString().trim() || 'local';
-          renderLocalCompletionScreen(id, finalValues, getDebugMode());
-        } catch {
-          // ignore
+        // Only show the local download/completion UI in debug mode.
+        if (getDebugMode()) {
+          try {
+            const id = (getQueryParam('id') || 'local').toString().trim() || 'local';
+            renderLocalCompletionScreen(id, finalValues, true);
+          } catch {
+            // ignore
+          }
+        } else {
+          renderBlockingStatus('Experiment finished', 'Run completed. Add ?debug=1 to download data locally.');
         }
 
         // Local fallback: dump to console
@@ -1144,6 +1597,13 @@
         setStatus('Experiment finished (local mode). Data logged to console.');
       }
     });
+
+    // Make the instance accessible to background helpers (e.g., DRT, eye tracking fallbacks).
+    try {
+      window.__psy_jsPsych = jsPsych;
+    } catch {
+      // ignore
+    }
 
     // Ensure core identifiers are present on *every* row (useful for debug CSV/JSON).
     // Multi-config mode already stamps these per trial since they change by config.
@@ -1455,33 +1915,39 @@
         }
 
         const baseValues = getJsPsychValues(jsPsych);
-        const finalValues = eyeTrackingExtraRow ? baseValues.concat([eyeTrackingExtraRow]) : baseValues;
-        const dataJson = JSON.stringify(finalValues);
+        const bufferedDrt = consumeBufferedDrtRows().map((r) => stampExportRow(r, config, compiled, configId));
 
-        if (typeof window.jatos !== 'undefined' && window.jatos && typeof window.jatos.submitResultData === 'function') {
-          try {
-            await window.jatos.submitResultData(dataJson);
-            if (typeof window.jatos.endStudyAjax === 'function') {
-              window.jatos.endStudyAjax(true);
-            } else if (typeof window.jatos.endStudy === 'function') {
-              window.jatos.endStudy(true);
-            }
-            return;
-          } catch (e) {
-            console.error('JATOS submit failed:', e);
-            setStatus(`JATOS submit failed: ${e && e.message ? e.message : String(e)}`);
-          }
-        }
+        let finalValues = baseValues;
+        if (bufferedDrt.length) finalValues = finalValues.concat(bufferedDrt);
+        if (eyeTrackingExtraRow) finalValues = finalValues.concat([stampExportRow(eyeTrackingExtraRow, config, compiled, configId)]);
+
+        const payload = buildResultPayload({ values: finalValues, config, compiled, configId, code });
+        const payloadJson = JSON.stringify(payload, null, 2);
+
+        const uploadAttempt = await tryUploadResultFileToJatos({
+          filename: buildResultFilename({ configId, code }),
+          jsonText: payloadJson
+        });
+
+        const dataJson = (uploadAttempt && uploadAttempt.ok === true)
+          ? JSON.stringify(buildResultSummary({ payload, uploadedFile: uploadAttempt }), null, 2)
+          : payloadJson;
+
+        if (await submitToJatosAndContinue(dataJson)) return;
 
         if (getDebugMode()) {
           downloadDebugData(jsPsych, String(code || 'multi'), finalValues);
         }
 
-        // Always show a local completion screen (prevents "blank page" confusion).
-        try {
-          renderLocalCompletionScreen(String(code || 'multi'), finalValues, getDebugMode());
-        } catch {
-          // ignore
+        // Only show the local download/completion UI in debug mode.
+        if (getDebugMode()) {
+          try {
+            renderLocalCompletionScreen(String(code || 'multi'), finalValues, true);
+          } catch {
+            // ignore
+          }
+        } else {
+          renderBlockingStatus('Experiment finished', 'Run completed. Add ?debug=1 to download data locally.');
         }
 
         console.log('Experiment finished. Data:', jsPsych.data.get().values());
@@ -1505,18 +1971,255 @@
   }
 
   function bootstrap() {
+    if (bootstrap.__didRun) return;
+    bootstrap.__didRun = true;
+    try {
+      console.log('[Interpreter] bootstrap starting');
+    } catch {
+      // ignore
+    }
+
+    try {
+      const host = els.jspsychTarget || document.getElementById('jspsych-target');
+      if (host && (!host.innerHTML || /Initializing interpreter/i.test(host.textContent || ''))) {
+        host.innerHTML = '<div style="padding:16px;opacity:0.85;font-family:system-ui;">Bootstrap started…</div>';
+      }
+    } catch {
+      // ignore
+    }
+
     detectJatos();
 
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
-    const baseParam = params.get('base');
-    const manifestParam = params.get('manifest');
+    const inJatos = (() => {
+      try { return !!getJatosApi(); } catch { return false; }
+    })();
+
+    const disableLegacyIdMechanism = (() => {
+      // Default: disable URL-param id in JATOS/publix runs (opt-in only).
+      try {
+        if (typeof window !== 'undefined' && window.COGFLOW_DISABLE_URL_ID === true) return true;
+      } catch {
+        // ignore
+      }
+      try {
+        // If JATOS API is available, allow overriding via component properties.
+        const v = (getJatosParam('disable_url_id') || '').toString().trim().toLowerCase();
+        if (v === '1' || v === 'true' || v === 'yes') return true;
+        if (v === '0' || v === 'false' || v === 'no') return false;
+      } catch {
+        // ignore
+      }
+      try {
+        const p = (window.location && typeof window.location.pathname === 'string') ? window.location.pathname : '';
+        if (p.includes('/publix/')) return true;
+      } catch {
+        // ignore
+      }
+      return false;
+    })();
+
+    async function maybeLoadInlineConfig() {
+      const cfg = getInlineConfigJson();
+      if (!cfg || typeof cfg !== 'object') return false;
+      try {
+        cfg.__source_url = 'inline:component';
+      } catch {
+        // ignore
+      }
+      setStatus('Loaded inline config from component HTML. Starting...');
+      renderBlockingStatus('Starting', 'Loaded inline config from component HTML. Starting...');
+      await startExperiment(cfg, 'inline');
+      return true;
+    }
+
+    async function maybeLoadConfigFromTokenStore() {
+      if (!inJatos) return false;
+
+      const pickFirst = (...vals) => {
+        for (const v of vals) {
+          const s = (v === null || v === undefined) ? '' : String(v).trim();
+          if (s) return s;
+        }
+        return '';
+      };
+
+      const baseUrlRaw = pickFirst(
+        getJatosParam('config_store_base_url'),
+        getJatosParam('token_store_base_url'),
+        getJatosParam('config_store_url'),
+        getJatosParam('token_store_url'),
+        (typeof window !== 'undefined' && typeof window.COGFLOW_TOKEN_STORE_BASE_URL === 'string') ? window.COGFLOW_TOKEN_STORE_BASE_URL : ''
+      );
+
+      const baseUrl = baseUrlRaw.replace(/\/+$/, '');
+
+      const configId = pickFirst(
+        getJatosParam('config_store_config_id'),
+        getJatosParam('token_store_config_id'),
+        getJatosParam('config_store_id'),
+        getJatosParam('token_store_id'),
+        (typeof window !== 'undefined' && typeof window.COGFLOW_TOKEN_STORE_CONFIG_ID === 'string') ? window.COGFLOW_TOKEN_STORE_CONFIG_ID : '',
+        (typeof window !== 'undefined' && typeof window.COGFLOW_CONFIG_STORE_CONFIG_ID === 'string') ? window.COGFLOW_CONFIG_STORE_CONFIG_ID : ''
+      );
+
+      const readToken = pickFirst(
+        getJatosParam('config_store_read_token'),
+        getJatosParam('token_store_read_token'),
+        getJatosParam('config_store_token'),
+        getJatosParam('token_store_token'),
+        (typeof window !== 'undefined' && typeof window.COGFLOW_TOKEN_STORE_READ_TOKEN === 'string') ? window.COGFLOW_TOKEN_STORE_READ_TOKEN : '',
+        (typeof window !== 'undefined' && typeof window.COGFLOW_CONFIG_STORE_READ_TOKEN === 'string') ? window.COGFLOW_CONFIG_STORE_READ_TOKEN : ''
+      );
+
+      if (!baseUrl || !configId || !readToken) {
+        try {
+          const present = listJatosTokenStoreKeys();
+          const msg = {
+            hasBaseUrl: !!baseUrl,
+            hasConfigId: !!configId,
+            hasReadToken: !!readToken,
+            keys: present
+          };
+          console.log('[Interpreter] Token-store settings not found in JATOS. Diagnostics:', msg);
+        } catch {
+          // ignore
+        }
+        return false;
+      }
+      if (!/^https?:\/\//i.test(baseUrl) || /^(javascript:|data:|file:)/i.test(baseUrl)) {
+        setStatus('Invalid token store base URL in JATOS component properties.');
+        renderBlockingStatus('Interpreter setup', 'Invalid token store base URL in JATOS component properties.');
+        return true;
+      }
+
+      const url = `${baseUrl}/v1/configs/${encodeURIComponent(configId)}`;
+      if (getDebugMode()) {
+        setStatus('Loading config from token store...');
+        renderBlockingStatus('Loading', 'Loading config from token store...');
+      }
+
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Authorization': `Bearer ${readToken}`
+          }
+        });
+
+        if (!res.ok) {
+          throw new Error(`Token store fetch failed (${res.status})`);
+        }
+
+        const cfg = await res.json();
+        try {
+          if (cfg && typeof cfg === 'object') {
+            cfg.__source_url = url;
+          }
+        } catch {
+          // ignore
+        }
+
+        await startExperiment(cfg, configId);
+        return true;
+      } catch (e) {
+        console.error('Token store load failed:', e);
+        setStatus(`Token store load failed: ${e && e.message ? e.message : String(e)}`);
+        renderBlockingStatus('Token store load failed', e && e.message ? e.message : String(e));
+        return true;
+      }
+    }
+
+    // If JATOS component properties include token-store settings, prefer them and skip URL params entirely.
+    // This avoids relying on query-string propagation through redirects.
+    try {
+      const p = maybeLoadConfigFromTokenStore();
+      if (p && typeof p.then === 'function') {
+        p.then((handled) => {
+          if (handled) return;
+          // Next preference: inline config embedded in component HTML.
+          maybeLoadInlineConfig().then((handledInline) => {
+            if (handledInline) return;
+            // Optional: legacy URL-param id mechanism.
+            if (disableLegacyIdMechanism) {
+              setStatus('No config source found. (Legacy ?id disabled)');
+              renderBlockingStatus(
+                'Interpreter setup',
+                'No config source found. Provide token-store settings via JATOS Component Properties (config_store_base_url, config_store_config_id, config_store_read_token) OR embed a full config JSON in this component HTML (id="cogflow_component_config_json").'
+              );
+              return;
+            }
+            continueLegacyBootstrap();
+          });
+        });
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Non-promise path: try inline config next.
+    try {
+      const p2 = maybeLoadInlineConfig();
+      if (p2 && typeof p2.then === 'function') {
+        p2.then((handledInline) => {
+          if (handledInline) return;
+          if (disableLegacyIdMechanism) {
+            setStatus('No config source found. (Legacy ?id disabled)');
+            renderBlockingStatus(
+              'Interpreter setup',
+              'No config source found. Provide token-store settings via JATOS Component Properties (config_store_base_url, config_store_config_id, config_store_read_token) OR embed a full config JSON in this component HTML (id="cogflow_component_config_json").'
+            );
+            return;
+          }
+          continueLegacyBootstrap();
+        });
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    function continueLegacyBootstrap() {
+
+    let id = getQueryParam('id');
+    // Automation fallback for JATOS: if no ?id survived redirects, use workerId when it matches our code pattern.
+    if (!id && inJatos) {
+      try {
+        const j = getJatosApi();
+        const wid = (j && j.workerId) ? String(j.workerId).trim() : '';
+        if (/^[A-Za-z0-9]{7}$/.test(wid)) {
+          id = wid;
+          if (getDebugMode()) {
+            console.log('[Interpreter] Using jatos.workerId as id:', wid);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    const baseParam = getQueryParam('base');
+    const manifestParam = getQueryParam('manifest');
     const loaderOpts = {
       baseUrl: (typeof window.ConfigLoader.normalizeBaseUrl === 'function')
         ? window.ConfigLoader.normalizeBaseUrl(baseParam, 'configs')
         : (baseParam || 'configs'),
       manifestUrl: manifestParam
     };
+
+    // Helpful for diagnosing JATOS param propagation.
+    if (getDebugMode()) {
+      try {
+        console.groupCollapsed('[Interpreter] Query params diagnostics');
+        console.log('location.href:', window.location && window.location.href ? window.location.href : null);
+        console.log('location.search:', window.location && window.location.search ? window.location.search : null);
+        console.log('location.hash:', window.location && window.location.hash ? window.location.hash : null);
+        console.log('jatos.urlQueryParameters:', getJatosUrlQueryParameters());
+        console.groupEnd();
+      } catch {
+        // ignore
+      }
+    }
 
     if (id) {
       const trimmed = String(id).trim();
@@ -1562,15 +2265,65 @@
           setStatus(e && e.message ? e.message : String(e));
         });
     } else {
-      setStatus('Missing required URL param: ?id=...');
+      if (inJatos) {
+        setStatus('Missing required param: id. Add it to the Study Link (?id=...) or provide a 7-char workerId (Personal Single link) or set it via Component Properties / Component JSON input / Study Session Data.');
+        renderBlockingStatus(
+          'Interpreter setup',
+          disableLegacyIdMechanism
+            ? 'No config source found. Legacy ?id is disabled. Set config_store_base_url, config_store_config_id, and config_store_read_token in JATOS Component Properties (or embed config JSON in the component HTML).'
+            : 'No config source found. Set config_store_base_url, config_store_config_id, and config_store_read_token in JATOS Component Properties (or provide ?id=... in the Study Link).'
+        );
+      } else {
+        setStatus('Missing required URL param: ?id=...');
+        renderBlockingStatus('Interpreter setup', 'Missing required URL param: ?id=...');
+      }
+    }
     }
   }
 
   ensureJatosLoaded().then((hasJatos) => {
-    if (hasJatos && typeof window.jatos.onLoad === 'function') {
-      window.jatos.onLoad(bootstrap);
-    } else {
-      bootstrap();
+    try {
+      console.log('[Interpreter] ensureJatosLoaded:', hasJatos, {
+        hasGlobalJatos: (() => {
+          try {
+            // eslint-disable-next-line no-undef
+            return typeof jatos !== 'undefined' && !!jatos;
+          } catch {
+            return false;
+          }
+        })(),
+        hasWindowJatos: (() => { try { return typeof window.jatos !== 'undefined' && !!window.jatos; } catch { return false; } })(),
+        hasParentJatos: (() => { try { return !!(window.parent && window.parent !== window && window.parent.jatos); } catch { return false; } })(),
+        hasTopJatos: (() => { try { return !!(window.top && window.top !== window && window.top.jatos); } catch { return false; } })(),
+        hasOnLoad: (() => { try { const j = getJatosApi(); return !!(j && typeof j.onLoad === 'function'); } catch { return false; } })()
+      });
+    } catch {
+      // ignore
     }
+
+    const j = getJatosApi();
+    if (hasJatos && j && typeof j.onLoad === 'function') {
+      let fired = false;
+      try {
+        j.onLoad(() => {
+          fired = true;
+          try { console.log('[Interpreter] jatos.onLoad fired'); } catch { /* ignore */ }
+          bootstrap();
+        });
+      } catch {
+        // ignore
+      }
+
+      // Safety net: if onLoad never fires, don't stay stuck forever.
+      setTimeout(() => {
+        if (bootstrap.__didRun) return;
+        if (fired) return;
+        try { console.warn('[Interpreter] jatos.onLoad did not fire; falling back to direct bootstrap'); } catch { /* ignore */ }
+        bootstrap();
+      }, 6000);
+      return;
+    }
+
+    bootstrap();
   });
 })();

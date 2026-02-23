@@ -991,6 +991,50 @@
       for (const item of expanded) {
         const type = item.type;
 
+        if (type === 'detection-response-task-start') {
+          timeline.push({
+            type: HtmlKeyboard,
+            stimulus: '',
+            prompt: null,
+            choices: 'NO_KEYS',
+            trial_duration: 1,
+            response_ends_trial: false,
+            on_start: () => {
+              try {
+                if (window.DrtEngine && typeof window.DrtEngine.start === 'function') {
+                  window.DrtEngine.start(item);
+                }
+              } catch {
+                // ignore
+              }
+            },
+            data: { plugin_type: 'drt-start', task_type: 'drt' }
+          });
+          continue;
+        }
+
+        if (type === 'detection-response-task-stop') {
+          timeline.push({
+            type: HtmlKeyboard,
+            stimulus: '',
+            prompt: null,
+            choices: 'NO_KEYS',
+            trial_duration: 1,
+            response_ends_trial: false,
+            on_start: () => {
+              try {
+                if (window.DrtEngine && typeof window.DrtEngine.stop === 'function') {
+                  window.DrtEngine.stop();
+                }
+              } catch {
+                // ignore
+              }
+            },
+            data: { plugin_type: 'drt-stop', task_type: 'drt' }
+          });
+          continue;
+        }
+
         if (type === 'html-keyboard-response' || type === 'instructions') {
           // Keep instructions as their own trial.
           timeline.push({
@@ -1047,7 +1091,6 @@
             allow_empty_on_timeout: item.allow_empty_on_timeout === true,
             timeout_ms: (item.timeout_ms === null || item.timeout_ms === undefined) ? null : Number(item.timeout_ms),
             questions: Array.isArray(item.questions) ? item.questions : [],
-            detection_response_task_enabled: item.detection_response_task_enabled === true,
             data: { plugin_type: type }
           });
           continue;
@@ -1102,6 +1145,50 @@
 
     for (const item of expanded) {
       const type = item.type;
+
+      if (type === 'detection-response-task-start') {
+        timeline.push({
+          type: HtmlKeyboard,
+          stimulus: '',
+          prompt: null,
+          choices: 'NO_KEYS',
+          trial_duration: 1,
+          response_ends_trial: false,
+          on_start: () => {
+            try {
+              if (window.DrtEngine && typeof window.DrtEngine.start === 'function') {
+                window.DrtEngine.start(item);
+              }
+            } catch {
+              // ignore
+            }
+          },
+          data: { plugin_type: 'drt-start', task_type: 'drt' }
+        });
+        continue;
+      }
+
+      if (type === 'detection-response-task-stop') {
+        timeline.push({
+          type: HtmlKeyboard,
+          stimulus: '',
+          prompt: null,
+          choices: 'NO_KEYS',
+          trial_duration: 1,
+          response_ends_trial: false,
+          on_start: () => {
+            try {
+              if (window.DrtEngine && typeof window.DrtEngine.stop === 'function') {
+                window.DrtEngine.stop();
+              }
+            } catch {
+              // ignore
+            }
+          },
+          data: { plugin_type: 'drt-stop', task_type: 'drt' }
+        });
+        continue;
+      }
 
       // PVT blocks (special handling): optionally extend by one trial per false start
       // to preserve the target number of valid (non-false-start) trials.
@@ -1170,8 +1257,6 @@
               ? (src.nback_show_feedback === true)
               : (nbackDefaults.show_feedback === true),
             feedback_duration_ms: pickFromDefaults(src.nback_feedback_duration_ms, 'feedback_duration_ms', 250),
-
-            detection_response_task_enabled: src.detection_response_task_enabled === true,
 
             ...(onFinish ? { on_finish: onFinish } : {}),
             data: { plugin_type: 'nback-continuous', task_type: 'nback', original_type: type }
@@ -1404,7 +1489,6 @@
           allow_empty_on_timeout: item.allow_empty_on_timeout === true,
           timeout_ms: (item.timeout_ms === null || item.timeout_ms === undefined) ? null : Number(item.timeout_ms),
           questions: Array.isArray(item.questions) ? item.questions : [],
-          detection_response_task_enabled: item.detection_response_task_enabled === true,
           data: { plugin_type: type }
         });
         continue;

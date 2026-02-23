@@ -6,6 +6,49 @@
 
 Static runtime that loads a CogFlow Builder export and runs it via jsPsych.
 
+## Recommended workflow (Feb 2026): Builder → Token Store → Interpreter (JATOS)
+
+The default “demo-ready” deployment path is:
+
+- Build a config in the **Builder**
+- Export it to the **CogFlow Token Store** (Cloudflare Worker + KV, optional R2 assets)
+- Run the **Interpreter inside JATOS**, loading the config via JATOS Component Properties (no fragile URL params)
+
+This is the safest path for students and novice researchers:
+
+- avoids `?id=...` URL params in JATOS
+- avoids SharePoint/Graph setup by default
+- avoids copy/pasting giant result blobs (the interpreter uploads a result JSON file to JATOS)
+
+### JATOS component setup (Interpreter)
+
+This repo includes a JATOS entry wrapper: `index_jatos.html`.
+
+Recommended asset layout inside your JATOS study assets for the Interpreter component:
+
+- Component HTML file: `index_jatos.html`
+- Interpreter runtime files live under: `interpreter/` (so the wrapper can load `/publix/.../interpreter/src/...`)
+
+In the Interpreter component’s **Component Properties** (user-defined properties), set:
+
+- `config_store_base_url`: Token Store base URL (e.g., `https://<your-worker>.workers.dev`)
+- `config_store_config_id`: config id from the Builder export
+- `config_store_read_token`: read token from the Builder export
+
+Notes:
+
+- Do not show tokens to participants. The interpreter keeps token-store loading UI hidden unless `?debug=1`.
+- The interpreter no longer relies on `?id=...` in JATOS (see `window.COGFLOW_DISABLE_URL_ID` in `index_jatos.html`).
+
+### Results in JATOS
+
+On completion inside JATOS, the interpreter:
+
+- uploads a `cogflow-results-...json` file as a JATOS result file (preferred)
+- submits a small JSON **summary object** as Result Data (rather than a raw array blob)
+
+If the result-file upload fails for any reason, it falls back to submitting the full JSON payload in Result Data.
+
 ## Repositories
 
 - Interpreter repo: https://github.com/KSalibay/json-interpreter-app
@@ -19,11 +62,14 @@ Static runtime that loads a CogFlow Builder export and runs it via jsPsych.
 
 ## How it loads configs
 
-- Primary: `?id=YOUR_ID`
-  - Loads `JSON_Interpreter_App/configs/YOUR_ID.json`
+- Primary (JATOS): Token Store settings from **Component Properties**
+  - `config_store_base_url`, `config_store_config_id`, `config_store_read_token`
+
+- Secondary (local / legacy): `?id=YOUR_ID`
+  - Loads `configs/YOUR_ID.json`
   - `id` is sanitized to `[A-Za-z0-9_-]`.
 
-- Multi-config mode: `?id=XXXXXXX` (7 alphanumeric characters)
+- Multi-config mode (local / legacy): `?id=XXXXXXX` (7 alphanumeric characters)
   - Loads all `configs/XXXXXXX-*.json`, shuffles their order, and runs them as one jsPsych session.
   - File discovery is best-effort:
     - If the server exposes a directory listing for `configs/`, it will be scraped.
@@ -194,9 +240,13 @@ If `pvt_settings.add_trial_per_false_start === true` and a `block` generates `pv
 
 ## JATOS
 
-When hosted inside JATOS, the page will detect `window.jatos` and will:
-- submit jsPsych data via `jatos.submitResultData(...)`
-- then end the study via `jatos.endStudyAjax(true)`
+Recommended: use `index_jatos.html` as the component HTML file.
+
+When hosted inside JATOS, the interpreter will:
+
+- load configs via Token Store settings provided in Component Properties
+- submit results via the JATOS API (`jatos.submitResultData(...)`)
+- upload a result JSON file (preferred) and then advance/end the study via `jatos.endStudyAjax(true)`
 
 ## Eye tracking (WebGazer)
 
