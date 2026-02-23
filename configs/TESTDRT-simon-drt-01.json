@@ -1,0 +1,53 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "simon",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": false,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "Simon + DRT test\n\nPress F for LEFT, J for RIGHT (based on the instructed response side).\nPress DRT key K when the red DRT stimulus appears.",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "detection-response-task-start",
+      "segment_label": "simon-main",
+      "response_key": "k",
+      "min_iti_ms": 1200,
+      "max_iti_ms": 2400,
+      "stimulus_duration_ms": 450,
+      "stimulus_type": "circle",
+      "stimulus_color": "#ff3b3b",
+      "location": "bottom-left",
+      "size_px": 18,
+      "min_rt_ms": 100,
+      "max_rt_ms": 1600
+    },
+    {
+      "type": "block",
+      "component_type": "simon-trial",
+      "length": 14,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "stimuli": [
+          { "name": "BLUE", "color": "#3b82f6" },
+          { "name": "YELLOW", "color": "#facc15" }
+        ],
+        "stimulus_side": ["left", "right"],
+        "correct_response_side": ["left", "right"],
+        "stimulus_color_name": ["BLUE", "YELLOW"],
+        "response_device": "keyboard",
+        "left_key": "f",
+        "right_key": "j",
+        "circle_diameter_px": 140,
+        "trial_duration_ms": 1500,
+        "iti_ms": 0
+      }
+    },
+    { "type": "detection-response-task-stop" }
+  ]
+}

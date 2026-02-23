@@ -1,0 +1,53 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "stroop",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": false,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "Stroop + DRT test\n\nPress the key for the INK color: F=RED, J=GREEN, K=BLUE.\nPress DRT key L when the red DRT stimulus appears.",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "detection-response-task-start",
+      "segment_label": "stroop-main",
+      "response_key": "l",
+      "min_iti_ms": 1000,
+      "max_iti_ms": 2000,
+      "stimulus_duration_ms": 500,
+      "stimulus_type": "square",
+      "stimulus_color": "#ff3b3b",
+      "location": "bottom-right",
+      "size_px": 18,
+      "min_rt_ms": 120,
+      "max_rt_ms": 2000
+    },
+    {
+      "type": "block",
+      "component_type": "stroop-trial",
+      "length": 12,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "stimuli": [
+          { "name": "RED", "color": "#ff3b3b" },
+          { "name": "GREEN", "color": "#22c55e" },
+          { "name": "BLUE", "color": "#3b82f6" }
+        ],
+        "response_mode": "color_naming",
+        "response_device": "keyboard",
+        "choice_keys": ["f", "j", "k"],
+        "word": ["RED", "GREEN", "BLUE"],
+        "ink_color_name": ["RED", "GREEN", "BLUE"],
+        "stimulus_font_size_px": 72,
+        "stimulus_duration_ms": 0,
+        "trial_duration_ms": 1800
+      }
+    },
+    { "type": "detection-response-task-stop" }
+  ]
+}

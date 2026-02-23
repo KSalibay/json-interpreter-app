@@ -1,0 +1,48 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "flanker",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "Flanker + DRT test\n\nRespond with F (left) / J (right).\nPress DRT key K when the red stimulus appears.",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "detection-response-task-start",
+      "segment_label": "flanker-main",
+      "response_key": "k",
+      "min_iti_ms": 1200,
+      "max_iti_ms": 2200,
+      "stimulus_duration_ms": 400,
+      "stimulus_type": "circle",
+      "stimulus_color": "#ff3b3b",
+      "location": "top-left",
+      "size_px": 18,
+      "min_rt_ms": 100,
+      "max_rt_ms": 1500
+    },
+    {
+      "type": "block",
+      "component_type": "flanker-trial",
+      "length": 12,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "stimulus_type": "arrows",
+        "target_direction": ["left", "right"],
+        "congruency": ["congruent", "incongruent"],
+        "left_key": "f",
+        "right_key": "j",
+        "stimulus_duration_ms": 800,
+        "trial_duration_ms": 1500,
+        "iti_ms": 0
+      }
+    },
+    { "type": "detection-response-task-stop" }
+  ]
+}

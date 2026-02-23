@@ -14,12 +14,6 @@ The default “demo-ready” deployment path is:
 - Export it to the **CogFlow Token Store** (Cloudflare Worker + KV, optional R2 assets)
 - Run the **Interpreter inside JATOS**, loading the config via JATOS Component Properties (no fragile URL params)
 
-This is the safest path for students and novice researchers:
-
-- avoids `?id=...` URL params in JATOS
-- avoids SharePoint/Graph setup by default
-- avoids copy/pasting giant result blobs (the interpreter uploads a result JSON file to JATOS)
-
 ### JATOS component setup (Interpreter)
 
 This repo includes a JATOS entry wrapper: `index_jatos.html`.
@@ -29,11 +23,42 @@ Recommended asset layout inside your JATOS study assets for the Interpreter comp
 - Component HTML file: `index_jatos.html`
 - Interpreter runtime files live under: `interpreter/` (so the wrapper can load `/publix/.../interpreter/src/...`)
 
-In the Interpreter component’s **Component Properties** (user-defined properties), set:
+In the Interpreter component’s **Component Properties** (user-defined properties), set either **single-config** settings or a **multi-config bundle**.
+
+#### Option A: single config (most common)
+
+Set:
 
 - `config_store_base_url`: Token Store base URL (e.g., `https://<your-worker>.workers.dev`)
 - `config_store_config_id`: config id from the Builder export
 - `config_store_read_token`: read token from the Builder export
+
+#### Option B: multi-config bundle (JATOS-first; shuffled sequential run)
+
+If you want to run multiple configs as one session (randomized order, sequential execution), set:
+
+- `config_store_base_url`
+- `config_store_code` (any label used to tag the session, e.g. `TEST001`)
+- `config_store_configs` (array)
+
+Example:
+
+```json
+{
+  "config_store_base_url": "https://<your-worker>.workers.dev",
+  "config_store_code": "TEST001",
+  "config_store_configs": [
+    { "config_id": "...", "read_token": "...", "task_type": "rdm", "filename": "..." },
+    { "config_id": "...", "read_token": "...", "task_type": "sart", "filename": "..." }
+  ]
+}
+```
+
+Tip: the Builder includes a **JATOS Props** button that generates this JSON automatically from your Token Store exports.
+
+If your JATOS UI can’t save arrays/objects as Component Properties, you can alternatively set:
+
+- `config_store_configs_json`: a JSON string containing the array (or `{ "configs": [...] }`)
 
 Notes:
 
@@ -63,7 +88,8 @@ If the result-file upload fails for any reason, it falls back to submitting the 
 ## How it loads configs
 
 - Primary (JATOS): Token Store settings from **Component Properties**
-  - `config_store_base_url`, `config_store_config_id`, `config_store_read_token`
+  - Single-config: `config_store_base_url`, `config_store_config_id`, `config_store_read_token`
+  - Multi-config: `config_store_base_url`, `config_store_code`, `config_store_configs` (array)
 
 - Secondary (local / legacy): `?id=YOUR_ID`
   - Loads `configs/YOUR_ID.json`

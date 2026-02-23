@@ -1,0 +1,46 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "pvt",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": false,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "PVT + DRT test\n\nPress SPACE as soon as the counter starts.\nPress DRT key F when the red DRT stimulus appears.",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "detection-response-task-start",
+      "segment_label": "pvt-main",
+      "response_key": "f",
+      "min_iti_ms": 1500,
+      "max_iti_ms": 2800,
+      "stimulus_duration_ms": 500,
+      "stimulus_type": "square",
+      "stimulus_color": "#ff3b3b",
+      "location": "top-right",
+      "size_px": 18,
+      "min_rt_ms": 100,
+      "max_rt_ms": 2000
+    },
+    {
+      "type": "block",
+      "component_type": "pvt-trial",
+      "length": 5,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "response_device": "keyboard",
+        "response_key": "space",
+        "foreperiod_ms": 1200,
+        "trial_duration_ms": 5000,
+        "iti_ms": 0,
+        "feedback_enabled": false
+      }
+    },
+    { "type": "detection-response-task-stop" }
+  ]
+}

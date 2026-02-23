@@ -1,0 +1,49 @@
+{
+  "experiment_type": "trial-based",
+  "task_type": "sart",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": false,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "SART (Sustained Attention to Response Task)\n\nPress SPACE for all digits except 3.\nDo NOT press for 3.\n\n(Testing DRT: press F when the red stimulus appears.)",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "detection-response-task-start",
+      "segment_label": "sart-main",
+      "response_key": "f",
+      "min_iti_ms": 3000,
+      "max_iti_ms": 5000,
+      "stimulus_duration_ms": 1000,
+      "stimulus_type": "square",
+      "stimulus_color": "#ff3b3b",
+      "location": "top-right",
+      "size_px": 18,
+      "min_rt_ms": 100,
+      "max_rt_ms": 2000
+    },
+    {
+      "type": "block",
+      "component_type": "sart-trial",
+      "length": 18,
+      "sampling_mode": "per-trial",
+      "parameter_values": {
+        "digit": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "nogo_digit": 3,
+        "go_key": "space",
+        "stimulus_duration_ms": 250,
+        "mask_duration_ms": 900,
+        "trial_duration_ms": 1150,
+        "iti_ms": 0
+      }
+    },
+    {
+      "type": "detection-response-task-stop"
+    }
+  ]
+}

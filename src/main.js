@@ -136,7 +136,10 @@
   function listJatosTokenStoreKeys() {
     const interesting = (k) => {
       const s = (k ?? '').toString().toLowerCase();
-      return s.startsWith('config_store_') || s.startsWith('token_store_') || s === 'config_store_base_url' || s === 'token_store_base_url';
+      return s.startsWith('config_store_') || s.startsWith('token_store_')
+        || s === 'config_store_base_url' || s === 'token_store_base_url'
+        || s === 'config_store_configs' || s === 'token_store_configs'
+        || s === 'config_store_configs_json' || s === 'token_store_configs_json';
     };
 
     const out = { urlQuery: [], studySessionData: [], componentProperties: [], componentJsonInput: [] };
@@ -334,6 +337,57 @@
       if (fromProps != null) return fromProps;
 
       // JSON input can be a string or an object.
+      const input = j.componentJsonInput;
+      if (typeof input === 'string' && input.trim()) {
+        try {
+          const parsed = JSON.parse(input);
+          const fromInput = readFromObj(parsed);
+          if (fromInput != null) return fromInput;
+        } catch {
+          // ignore
+        }
+      } else if (input && typeof input === 'object') {
+        const fromInput = readFromObj(input);
+        if (fromInput != null) return fromInput;
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
+  }
+
+  function getJatosParamRaw(name) {
+    const key = (name ?? '').toString();
+    if (!key) return null;
+
+    try {
+      const qp = getJatosUrlQueryParameters();
+      if (qp && Object.prototype.hasOwnProperty.call(qp, key)) {
+        const v = qp[key];
+        return (v === undefined || v === null) ? null : v;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const j = getJatosApi();
+      if (!j) return null;
+
+      const readFromObj = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (!Object.prototype.hasOwnProperty.call(obj, key)) return null;
+        const v = obj[key];
+        return (v === undefined || v === null) ? null : v;
+      };
+
+      const fromSession = readFromObj(j.studySessionData);
+      if (fromSession != null) return fromSession;
+
+      const fromProps = readFromObj(j.componentProperties);
+      if (fromProps != null) return fromProps;
+
       const input = j.componentJsonInput;
       if (typeof input === 'string' && input.trim()) {
         try {
@@ -1914,18 +1968,36 @@
           }
         }
 
+        // Multi-config mode doesn't have a single canonical {config, compiled, configId}.
+        // Trials are already stamped with {code, task_type, config_id} as they are added.
         const baseValues = getJsPsychValues(jsPsych);
-        const bufferedDrt = consumeBufferedDrtRows().map((r) => stampExportRow(r, config, compiled, configId));
+        const bufferedDrt = consumeBufferedDrtRows().map((r) => {
+          const stamped = stampExportRow(r, null, null, null);
+          try {
+            if (stamped && typeof stamped === 'object' && stamped.code == null) stamped.code = code;
+          } catch {
+            // ignore
+          }
+          return stamped;
+        });
 
         let finalValues = baseValues;
         if (bufferedDrt.length) finalValues = finalValues.concat(bufferedDrt);
-        if (eyeTrackingExtraRow) finalValues = finalValues.concat([stampExportRow(eyeTrackingExtraRow, config, compiled, configId)]);
+        if (eyeTrackingExtraRow) {
+          const stampedEye = stampExportRow(eyeTrackingExtraRow, null, null, null);
+          try {
+            if (stampedEye && typeof stampedEye === 'object' && stampedEye.code == null) stampedEye.code = code;
+          } catch {
+            // ignore
+          }
+          finalValues = finalValues.concat([stampedEye]);
+        }
 
-        const payload = buildResultPayload({ values: finalValues, config, compiled, configId, code });
+        const payload = buildResultPayload({ values: finalValues, config: null, compiled: null, configId: null, code });
         const payloadJson = JSON.stringify(payload, null, 2);
 
         const uploadAttempt = await tryUploadResultFileToJatos({
-          filename: buildResultFilename({ configId, code }),
+          filename: buildResultFilename({ configId: null, code }),
           jsonText: payloadJson
         });
 
@@ -2053,6 +2125,30 @@
 
       const baseUrl = baseUrlRaw.replace(/\/+$/, '');
 
+      // Optional: multi-config mode (JATOS-first). Accept either:
+      // - config_store_configs: array/object in Component Properties, OR
+      // - config_store_configs_json: JSON string
+      const multiConfigsVal = (() => {
+        try {
+          const raw = getJatosParamRaw('config_store_configs');
+          if (raw != null) return raw;
+        } catch {
+          // ignore
+        }
+        try {
+          const raw = getJatosParamRaw('token_store_configs');
+          if (raw != null) return raw;
+        } catch {
+          // ignore
+        }
+
+        const txt = pickFirst(
+          getJatosParam('config_store_configs_json'),
+          getJatosParam('token_store_configs_json')
+        );
+        return txt || null;
+      })();
+
       const configId = pickFirst(
         getJatosParam('config_store_config_id'),
         getJatosParam('token_store_config_id'),
@@ -2070,6 +2166,123 @@
         (typeof window !== 'undefined' && typeof window.COGFLOW_TOKEN_STORE_READ_TOKEN === 'string') ? window.COGFLOW_TOKEN_STORE_READ_TOKEN : '',
         (typeof window !== 'undefined' && typeof window.COGFLOW_CONFIG_STORE_READ_TOKEN === 'string') ? window.COGFLOW_CONFIG_STORE_READ_TOKEN : ''
       );
+
+      const exportCode = pickFirst(
+        getJatosParam('config_store_code'),
+        getJatosParam('token_store_code'),
+        getJatosParam('export_code'),
+        getJatosParam('code')
+      );
+
+      const parseMultiConfigs = (val) => {
+        if (!val) return null;
+        if (Array.isArray(val)) return val;
+
+        if (typeof val === 'string') {
+          const t = val.trim();
+          if (!t) return null;
+          try {
+            const parsed = JSON.parse(t);
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed && typeof parsed === 'object' && Array.isArray(parsed.configs)) return parsed.configs;
+          } catch {
+            return null;
+          }
+          return null;
+        }
+
+        if (val && typeof val === 'object') {
+          if (Array.isArray(val.configs)) return val.configs;
+        }
+
+        return null;
+      };
+
+      const multiConfigs = parseMultiConfigs(multiConfigsVal);
+
+      // If multi-config keys are present, handle this path even if single-config fields are missing.
+      if (multiConfigs && Array.isArray(multiConfigs) && multiConfigs.length > 0) {
+        if (!baseUrl) {
+          setStatus('Missing token store base URL in JATOS component properties.');
+          renderBlockingStatus('Interpreter setup', 'Missing token store base URL in JATOS component properties.');
+          return true;
+        }
+        if (!/^https?:\/\//i.test(baseUrl) || /^(javascript:|data:|file:)/i.test(baseUrl)) {
+          setStatus('Invalid token store base URL in JATOS component properties.');
+          renderBlockingStatus('Interpreter setup', 'Invalid token store base URL in JATOS component properties.');
+          return true;
+        }
+
+        const entries = [];
+        for (const item of multiConfigs) {
+          if (!item) continue;
+          if (typeof item === 'string') {
+            const cid = item.trim();
+            if (!cid) continue;
+            if (!readToken) {
+              setStatus('Multi-config mode requires per-config read_token (or a global config_store_read_token).');
+              renderBlockingStatus('Interpreter setup', 'Multi-config mode requires per-config read_token (or a global config_store_read_token).');
+              return true;
+            }
+            entries.push({ config_id: cid, read_token: readToken, task_type: null, filename: null });
+            continue;
+          }
+          if (typeof item === 'object') {
+            const cid = (item.config_id || item.configId || item.id || '').toString().trim();
+            const tok = (item.read_token || item.readToken || item.token || '').toString().trim() || readToken;
+            if (!cid || !tok) {
+              continue;
+            }
+            entries.push({
+              config_id: cid,
+              read_token: tok,
+              task_type: (item.task_type || item.taskType || '').toString().trim() || null,
+              filename: (item.filename || '').toString().trim() || null
+            });
+          }
+        }
+
+        if (entries.length === 0) {
+          setStatus('No valid multi-config entries found in JATOS component properties.');
+          renderBlockingStatus('Interpreter setup', 'No valid multi-config entries found in JATOS component properties.');
+          return true;
+        }
+
+        if (getDebugMode()) {
+          setStatus(`Loading ${entries.length} configs from token store...`);
+          renderBlockingStatus('Loading', `Loading ${entries.length} configs from token store...`);
+        }
+
+        try {
+          const out = [];
+          for (const e of entries) {
+            const url = `${baseUrl}/v1/configs/${encodeURIComponent(e.config_id)}`;
+            const res = await fetch(url, {
+              method: 'GET',
+              cache: 'no-store',
+              headers: {
+                'Authorization': `Bearer ${e.read_token}`
+              }
+            });
+            if (!res.ok) throw new Error(`Token store fetch failed (${res.status})`);
+            const cfg = await res.json();
+            try {
+              if (cfg && typeof cfg === 'object') cfg.__source_url = url;
+            } catch {
+              // ignore
+            }
+            out.push({ id: (e.filename || e.task_type || e.config_id || null), sourceUrl: url, config: cfg });
+          }
+
+          await startExperimentFromConfigs(out, exportCode || null);
+          return true;
+        } catch (e) {
+          console.error('Token store multi-config load failed:', e);
+          setStatus(`Token store load failed: ${e && e.message ? e.message : String(e)}`);
+          renderBlockingStatus('Token store load failed', e && e.message ? e.message : String(e));
+          return true;
+        }
+      }
 
       if (!baseUrl || !configId || !readToken) {
         try {
