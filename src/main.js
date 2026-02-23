@@ -42,11 +42,22 @@
     jspsychTarget: document.getElementById('jspsych-target')
   };
 
+  function getQuickDebugFlag() {
+    // We can't rely on getDebugMode() yet (declared later), so do a minimal query check here.
+    try {
+      const v = new URLSearchParams(window.location.search).get('debug');
+      const s = (v === null || v === undefined) ? '' : String(v).trim().toLowerCase();
+      return s === '1' || s === 'true' || s === 'yes' || s === 'csv' || s === 'json';
+    } catch {
+      return false;
+    }
+  }
+
   try {
     const p = (window.location && typeof window.location.pathname === 'string') ? window.location.pathname : '';
     if (p.includes('/publix/')) {
       const host = els.jspsychTarget || document.getElementById('jspsych-target');
-      if (host && !host.innerHTML) {
+      if (host && !host.innerHTML && getQuickDebugFlag()) {
         host.innerHTML = '<div style="padding:16px;opacity:0.85;font-family:system-ui;">Initializing interpreter…</div>';
       }
     }
@@ -1512,6 +1523,13 @@
 
     const displayEl = els.jspsychTarget || document.getElementById('jspsych-target') || document.body;
 
+    // Clear any bootstrap/loading UI so it can't overlap task presentation.
+    try {
+      if (displayEl) displayEl.innerHTML = '';
+    } catch {
+      // ignore
+    }
+
     // Ensure the mount container is actually visible and viewport-sized.
     try {
       displayEl.style.display = 'block';
@@ -1865,6 +1883,13 @@
 
     const displayEl = els.jspsychTarget || document.getElementById('jspsych-target') || document.body;
 
+    // Clear any bootstrap/loading UI so it can't overlap task presentation.
+    try {
+      if (displayEl) displayEl.innerHTML = '';
+    } catch {
+      // ignore
+    }
+
     // Ensure the mount container is actually visible and viewport-sized.
     try {
       displayEl.style.display = 'block';
@@ -2053,8 +2078,13 @@
 
     try {
       const host = els.jspsychTarget || document.getElementById('jspsych-target');
-      if (host && (!host.innerHTML || /Initializing interpreter/i.test(host.textContent || ''))) {
+      if (!host) {
+        // ignore
+      } else if (getDebugMode() && (!host.innerHTML || /Initializing interpreter/i.test(host.textContent || ''))) {
         host.innerHTML = '<div style="padding:16px;opacity:0.85;font-family:system-ui;">Bootstrap started…</div>';
+      } else if (!getDebugMode() && /^(\s*(Initializing interpreter|Bootstrap started)\b)/i.test((host.textContent || '').trim())) {
+        // If a cached build left some boot text around, wipe it for non-debug runs.
+        host.innerHTML = '';
       }
     } catch {
       // ignore
