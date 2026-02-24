@@ -19,7 +19,7 @@
 
   const info = {
     name: 'soc-dashboard',
-    version: '0.6.6',
+    version: '0.6.7',
     parameters: {
       trial_duration_ms: { type: PT.INT, default: 60000 },
       end_key: { type: PT.STRING, default: 'escape' },
@@ -380,6 +380,22 @@
           subtask: null,
           schedule: { has_schedule: false, start_at_ms: 0, end_at_ms: null }
         }));
+
+    // Auto-sequencing fallback:
+    // If the researcher requested multiple tasks (num_tasks > 1) but provided no explicit
+    // per-subtask scheduling fields, default to showing exactly one window at a time.
+    // This preserves the explicit scheduling/overlap demo behavior when any schedule exists.
+    const hasAnySchedule = windowsSpec.some((w) => (w?.schedule?.has_schedule === true));
+    if (!hasAnySchedule && fallbackCount > 1 && Number.isFinite(trialMs) && trialMs > 0 && windowsSpec.length > 1) {
+      const n = windowsSpec.length;
+      for (let i = 0; i < n; i++) {
+        const startAt = Math.floor((trialMs * i) / n);
+        let endAt = Math.floor((trialMs * (i + 1)) / n);
+        if (i === n - 1) endAt = Math.floor(trialMs);
+        if (endAt < startAt) endAt = startAt;
+        windowsSpec[i].schedule = { has_schedule: true, start_at_ms: startAt, end_at_ms: endAt };
+      }
+    }
 
     const subtaskStartTs = new Array(windowsSpec.length).fill(null);
     const markGenericSubtaskStart = (idx) => {

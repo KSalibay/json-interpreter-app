@@ -518,7 +518,12 @@
         if (!isObject(w)) continue;
         const s = sampleNumber(w.min, w.max);
         if (s === null) continue;
-        const shouldRound = /(_ms|_px|_deg|_count|_trials|_repetitions)$/i.test(k);
+        // Many windowed parameters are intended to be integer-ish (ms, px, counts).
+        // However, some parameters *end with* `_px` but are continuous-valued, e.g.
+        // `spatial_frequency_cyc_per_px` for Gabor. Rounding those to integers
+        // collapses values like 0.06 -> 0, which makes the stimulus invisible.
+        const isCyclesPerPx = /cyc_per_px$/i.test(k);
+        const shouldRound = !isCyclesPerPx && /(_ms|_px|_deg|_count|_trials|_repetitions)$/i.test(k);
         t[k] = shouldRound ? Math.round(s) : s;
       }
 
@@ -833,11 +838,163 @@
       ...(preserveNbackBlocks ? ['nback-block'] : [])
     ];
 
-    const expanded = expandTimeline(config.timeline, {
+    const expandedRaw = expandTimeline(config.timeline, {
       preserveBlocksForComponentTypes: preserveBlocksFor,
       expandNbackSequences: experimentType === 'trial-based',
       nbackDefaults
     });
+
+    // SOC Dashboard: the Builder has "helper" component types (`soc-subtask-*`, `soc-dashboard-icon`) that are
+    // intended to be composed into a single `soc-dashboard` session at export time.
+    // If a config reaches the Interpreter without an explicit `soc-dashboard` session container, running the
+    // helper items as separate timeline trials will always look sequential (one SOC desktop per trial).
+    //
+    // To be resilient to such exports, auto-compose these helper items into one `soc-dashboard` trial.
+    const socDefaultsGlobal = isObject(config.soc_dashboard_settings) ? config.soc_dashboard_settings : null;
+
+    let expanded = (() => {
+      if (taskType !== 'soc-dashboard') return expandedRaw;
+      const tl = Array.isArray(expandedRaw) ? expandedRaw : [];
+      const hasSession = tl.some((it) => it && typeof it === 'object' && it.type === 'soc-dashboard');
+      if (hasSession) return tl;
+
+      const isSocSubtaskType = (t) => {
+        return t === 'soc-subtask-sart-like'
+          || t === 'soc-subtask-nback-like'
+          || t === 'soc-subtask-flanker-like'
+          || t === 'soc-subtask-wcst-like'
+          || t === 'soc-subtask-pvt-like';
+      };
+
+      const mapSocSubtaskKind = (t) => {
+        switch (t) {
+          case 'soc-subtask-sart-like': return 'sart-like';
+          case 'soc-subtask-nback-like': return 'nback-like';
+          case 'soc-subtask-flanker-like': return 'flanker-like';
+          case 'soc-subtask-wcst-like': return 'wcst-like';
+          case 'soc-subtask-pvt-like': return 'pvt-like';
+          default: return 'unknown';
+        }
+      };
+
+      const extractSubtaskParams = (rawItem) => {
+        const o = (rawItem && typeof rawItem === 'object') ? rawItem : {};
+        const out = {};
+        for (const [k, v] of Object.entries(o)) {
+          if (k === 'type' || k === 'name' || k === 'title' || k === 'parameters' || k === 'data') continue;
+          out[k] = v;
+        }
+        return out;
+      };
+
+      const subtasks = [];
+      const icons = [];
+      let insertAt = -1;
+
+      for (let i = 0; i < tl.length; i++) {
+        const item = tl[i];
+        if (!item || typeof item !== 'object') continue;
+        const t = item.type;
+        if (t === 'soc-dashboard-icon') {
+          if (insertAt < 0) insertAt = i;
+          icons.push({
+            label: (item.label || item.name || 'Icon').toString(),
+            app: (item.app || 'soc').toString(),
+            icon_text: (item.icon_text || '').toString(),
+            row: Number.isFinite(Number(item.row)) ? parseInt(item.row, 10) : 0,
+            col: Number.isFinite(Number(item.col)) ? parseInt(item.col, 10) : 0,
+            distractor: (item.distractor !== undefined) ? !!item.distractor : true
+          });
+          continue;
+        }
+        if (isSocSubtaskType(t)) {
+          if (insertAt < 0) insertAt = i;
+          subtasks.push({
+            type: mapSocSubtaskKind(t),
+            title: (item.title || item.name || mapSocSubtaskKind(t) || 'Subtask').toString(),
+            ...extractSubtaskParams(item)
+          });
+        }
+      }
+
+      if (insertAt < 0 || (subtasks.length === 0 && icons.length === 0)) return tl;
+
+      // If the SOC defaults don't specify duration, infer it from the scheduled subtasks.
+      const inferSessionDurationMs = () => {
+        let maxEnd = 0;
+        for (const s of subtasks) {
+          const start = Number.isFinite(Number(s.start_at_ms)) ? Number(s.start_at_ms)
+            : (Number.isFinite(Number(s.start_delay_ms)) ? Number(s.start_delay_ms) : 0);
+          let end = null;
+          if (Number.isFinite(Number(s.duration_ms)) && Number(s.duration_ms) > 0) {
+            end = start + Number(s.duration_ms);
+          } else if (Number.isFinite(Number(s.end_at_ms)) && Number(s.end_at_ms) > 0) {
+            end = Number(s.end_at_ms);
+          }
+          if (Number.isFinite(end) && end > maxEnd) maxEnd = end;
+        }
+        return maxEnd > 0 ? Math.ceil(maxEnd) : null;
+      };
+
+      const inferredDuration = inferSessionDurationMs();
+      const session = {
+        type: 'soc-dashboard',
+        // Leave most fields to socDefaultsGlobal merge at compile time.
+        ...(inferredDuration !== null ? { trial_duration_ms: inferredDuration } : {}),
+        ...(subtasks.length ? { subtasks } : {}),
+        ...(icons.length ? { desktop_icons: icons } : {}),
+        ...(socDefaultsGlobal && socDefaultsGlobal.num_tasks === undefined ? { num_tasks: subtasks.length || icons.length || 1 } : {})
+      };
+
+      const out = [];
+      for (let i = 0; i < tl.length; i++) {
+        if (i === insertAt) out.push(session);
+
+        const item = tl[i];
+        if (!item || typeof item !== 'object') {
+          out.push(item);
+          continue;
+        }
+
+        const t = item.type;
+        if (t === 'soc-dashboard-icon' || isSocSubtaskType(t)) {
+          continue; // absorbed into session
+        }
+
+        out.push(item);
+      }
+
+      return out;
+    })();
+
+    // Rewards activation normalization:
+    // - Builder exports a top-level `reward_settings.enabled` flag.
+    // - Rewards policy is defined by a `reward-settings` timeline component.
+    // To be resilient to hand-edited / legacy configs, treat `reward_settings.enabled` as a master switch:
+    //   - enabled === true  => ensure a reward-settings component exists and runs first
+    //   - enabled === false => ignore/remove any reward-settings components
+    const rewardSettingsCfg = isObject(config.reward_settings) ? config.reward_settings : null;
+    const rewardsEnabledFlag = (rewardSettingsCfg && typeof rewardSettingsCfg.enabled === 'boolean') ? rewardSettingsCfg.enabled : null;
+    const rewardSettingsOverrides = (() => {
+      if (!rewardSettingsCfg) return null;
+      const o = { ...rewardSettingsCfg };
+      delete o.enabled;
+      return Object.keys(o).length ? o : null;
+    })();
+
+    if (rewardsEnabledFlag !== null) {
+      const tl = Array.isArray(expanded) ? expanded : [];
+      const isRewardSettingsItem = (it) => it && typeof it === 'object' && it.type === 'reward-settings';
+      const firstRewardSettings = tl.find(isRewardSettingsItem) || null;
+      const rest = tl.filter((it) => !isRewardSettingsItem(it));
+
+      if (rewardsEnabledFlag === true) {
+        const base = firstRewardSettings ? { ...firstRewardSettings } : { type: 'reward-settings' };
+        expanded = [{ ...base, ...(rewardSettingsOverrides ? rewardSettingsOverrides : {}) }, ...rest];
+      } else {
+        expanded = rest;
+      }
+    }
 
     const timeline = [];
 
@@ -898,11 +1055,69 @@
       });
     };
 
-    const computeRewardPoints = (event, policy) => {
+    const normalizeRewardScreen = (raw, legacyTitle, legacyTpl) => {
+      const s = (raw && typeof raw === 'object') ? raw : {};
+      return {
+        title: ((s.title ?? legacyTitle ?? '') || '').toString(),
+        template_html: ((s.template_html ?? s.html ?? legacyTpl ?? '') || '').toString(),
+        image_url: ((s.image_url ?? '') || '').toString(),
+        audio_url: ((s.audio_url ?? '') || '').toString()
+      };
+    };
+
+    const resolveRewardMediaUrl = (maybeUrl) => {
+      const u = (maybeUrl ?? '').toString().trim();
+      if (!u) return '';
+      return resolveMaybeRelativeUrl(u) || u;
+    };
+
+    const playRewardAudio = (maybeUrl) => {
+      const u = resolveRewardMediaUrl(maybeUrl);
+      if (!u) return;
+      try {
+        const a = new Audio(u);
+        a.preload = 'auto';
+        // Autoplay may be blocked; ignore failures.
+        a.play().catch(() => {});
+      } catch {
+        // ignore
+      }
+    };
+
+    const renderRewardScreenHtml = (screen, vars, { titleFallback } = {}) => {
+      const scr = (screen && typeof screen === 'object') ? screen : {};
+      const title = (scr.title || titleFallback || 'Rewards').toString();
+      const tpl = (scr.template_html || '').toString();
+      const body = tpl ? renderTemplate(tpl, vars) : '';
+      const imageUrl = resolveRewardMediaUrl(scr.image_url);
+      const audioUrl = resolveRewardMediaUrl(scr.audio_url);
+
+      const imgHtml = imageUrl
+        ? `<div style="margin: 12px 0;"><img src="${escapeHtml(imageUrl)}" alt="reward media" style="max-width:100%; max-height: 45vh; object-fit: contain;" /></div>`
+        : '';
+
+      const audioHtml = audioUrl
+        ? `<div style="margin: 12px 0;"><audio controls src="${escapeHtml(audioUrl)}" style="width: 100%;"></audio></div>`
+        : '';
+
+      return `
+        <div class="psy-wrap">
+          <div class="psy-stage">
+            <div class="psy-text">
+              <h2 style="margin:0 0 8px 0;">${escapeHtml(title)}</h2>
+              ${imgHtml}
+              <div>${body}</div>
+              ${audioHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const isRewardSuccess = (event, policy) => {
       const p = (policy && typeof policy === 'object') ? policy : {};
       const basis = (p.scoring_basis || 'both').toString().trim().toLowerCase();
       const rtThresh = Number(p.rt_threshold_ms);
-      const points = Number(p.points_per_success);
 
       const rtOk = Number.isFinite(rtThresh)
         ? (event.rt_ms !== null && event.rt_ms !== undefined && Number(event.rt_ms) <= rtThresh)
@@ -912,18 +1127,20 @@
       const correctKnown = (event.correct === true || event.correct === false);
       const requireCorrectForRt = p.require_correct_for_rt === true;
 
-      let success = false;
-
       if (basis === 'accuracy') {
-        success = correctOk;
-      } else if (basis === 'reaction_time') {
-        success = rtOk && (!requireCorrectForRt || !correctKnown || correctOk);
-      } else {
-        // both
-        success = correctOk && rtOk;
+        return correctOk;
       }
+      if (basis === 'reaction_time') {
+        return rtOk && (!requireCorrectForRt || !correctKnown || correctOk);
+      }
+      // both
+      return correctOk && rtOk;
+    };
 
-      if (!success) return 0;
+    const computeRewardPoints = (event, policy) => {
+      const p = (policy && typeof policy === 'object') ? policy : {};
+      const points = Number(p.points_per_success);
+      if (!isRewardSuccess(event, p)) return 0;
       return Number.isFinite(points) ? points : 0;
     };
 
@@ -933,6 +1150,7 @@
       try {
         const bag = window[storeKey];
         if (!bag || bag.enabled !== true) return null;
+        const policy = (bag.policy && typeof bag.policy === 'object') ? bag.policy : rewardsPolicy;
         const state = (bag.state && typeof bag.state === 'object') ? bag.state : (bag.state = {});
         const events = Array.isArray(state.events) ? state.events : (state.events = []);
 
@@ -945,17 +1163,65 @@
         events.push(evt);
         state.eligible_trials = events.length;
 
-        const calcOnFly = bag.policy && bag.policy.calculate_on_the_fly === true;
-        if (calcOnFly) {
-          const pts = computeRewardPoints(evt, bag.policy);
-          state.total_points = Number.isFinite(Number(state.total_points)) ? Number(state.total_points) : 0;
-          state.rewarded_trials = Number.isFinite(Number(state.rewarded_trials)) ? Number(state.rewarded_trials) : 0;
-          state.total_points += pts;
-          if (pts > 0) state.rewarded_trials += 1;
-          evt.reward_points = pts;
-          return { pts, total: state.total_points, rewarded_trials: state.rewarded_trials, eligible_trials: state.eligible_trials };
+        // Keep state updated every trial (needed for milestone triggers).
+        const pts = computeRewardPoints(evt, policy);
+        const success = isRewardSuccess(evt, policy);
+
+        state.total_points = Number.isFinite(Number(state.total_points)) ? Number(state.total_points) : 0;
+        state.rewarded_trials = Number.isFinite(Number(state.rewarded_trials)) ? Number(state.rewarded_trials) : 0;
+        state.success_streak = Number.isFinite(Number(state.success_streak)) ? Number(state.success_streak) : 0;
+
+        state.total_points += pts;
+        if (pts > 0) state.rewarded_trials += 1;
+        state.success_streak = success ? (state.success_streak + 1) : 0;
+        evt.reward_points = pts;
+
+        // Milestone queueing
+        const queue = Array.isArray(state.screen_queue) ? state.screen_queue : (state.screen_queue = []);
+        const shown = (state.milestones_shown && typeof state.milestones_shown === 'object')
+          ? state.milestones_shown
+          : (state.milestones_shown = {});
+
+        const ms = Array.isArray(policy.milestones) ? policy.milestones : [];
+        for (let i = 0; i < ms.length; i++) {
+          const m0 = ms[i];
+          if (!m0 || typeof m0 !== 'object') continue;
+          const id = (m0.id ?? `m${i + 1}`).toString();
+          if (shown[id]) continue;
+
+          const trigger = (m0.trigger_type ?? m0.trigger ?? 'trial_count').toString();
+          const threshold = Number(m0.threshold ?? m0.value);
+          if (!Number.isFinite(threshold) || threshold <= 0) continue;
+
+          let achieved = false;
+          if (trigger === 'trial_count') achieved = state.eligible_trials >= threshold;
+          else if (trigger === 'total_points') achieved = state.total_points >= threshold;
+          else if (trigger === 'success_streak') achieved = state.success_streak >= threshold;
+
+          if (achieved) {
+            shown[id] = true;
+            const scr = (m0.screen && typeof m0.screen === 'object') ? m0.screen : m0;
+            queue.push(normalizeRewardScreen(scr, 'Rewards', scr.template_html ?? scr.html ?? ''));
+          }
         }
-        return { pts: null, total: null, rewarded_trials: null, eligible_trials: state.eligible_trials };
+
+        const calcOnFly = policy.calculate_on_the_fly === true;
+        if (calcOnFly) {
+          return {
+            pts,
+            total: state.total_points,
+            rewarded_trials: state.rewarded_trials,
+            eligible_trials: state.eligible_trials,
+            success_streak: state.success_streak
+          };
+        }
+        return {
+          pts: null,
+          total: null,
+          rewarded_trials: null,
+          eligible_trials: state.eligible_trials,
+          success_streak: state.success_streak
+        };
       } catch {
         return null;
       }
@@ -971,6 +1237,7 @@
             data.reward_total_points = res.total;
             data.reward_rewarded_trials = res.rewarded_trials;
             data.reward_eligible_trials = res.eligible_trials;
+            data.reward_success_streak = res.success_streak;
           } catch {
             // ignore
           }
@@ -981,17 +1248,119 @@
       };
     };
 
+    const maybeWrapTrialWithRewardPopups = (trial, pluginType) => {
+      if (!rewardsPolicy) return trial;
+      const ms = Array.isArray(rewardsPolicy.milestones) ? rewardsPolicy.milestones : [];
+      if (!ms.length) return trial;
+
+      const storeKey = rewardsStoreKey;
+
+      const queueNotEmpty = () => {
+        try {
+          const bag = window[storeKey];
+          const q = bag && bag.state && Array.isArray(bag.state.screen_queue) ? bag.state.screen_queue : [];
+          return q.length > 0;
+        } catch {
+          return false;
+        }
+      };
+
+      const contChoices = rewardsPolicy.continue_key === 'ALL_KEYS'
+        ? 'ALL_KEYS'
+        : (rewardsPolicy.continue_key === 'enter' ? ['Enter'] : [' ']);
+
+      const rewardPopupTrial = {
+        type: HtmlKeyboard,
+        stimulus: () => {
+          try {
+            const bag = window[storeKey];
+            const policy = bag && bag.policy ? bag.policy : rewardsPolicy;
+            const state = (bag && bag.state && typeof bag.state === 'object') ? bag.state : {};
+            const q = Array.isArray(state.screen_queue) ? state.screen_queue : [];
+            const next = q.shift();
+
+            const vars = {
+              currency_label: (policy.currency_label || 'points').toString(),
+              scoring_basis: policy.scoring_basis,
+              scoring_basis_label: scoringBasisLabel(policy.scoring_basis),
+              rt_threshold_ms: Number.isFinite(Number(policy.rt_threshold_ms)) ? Number(policy.rt_threshold_ms) : 0,
+              points_per_success: Number.isFinite(Number(policy.points_per_success)) ? Number(policy.points_per_success) : 0,
+              continue_key: policy.continue_key,
+              continue_key_label: continueKeyLabel(policy.continue_key),
+              total_points: Number.isFinite(Number(state.total_points)) ? Number(state.total_points) : 0,
+              rewarded_trials: Number.isFinite(Number(state.rewarded_trials)) ? Number(state.rewarded_trials) : 0,
+              eligible_trials: Number.isFinite(Number(state.eligible_trials)) ? Number(state.eligible_trials) : 0,
+              success_streak: Number.isFinite(Number(state.success_streak)) ? Number(state.success_streak) : 0,
+              badge_level: (state.badge_level ?? '')
+            };
+
+            const screen = normalizeRewardScreen(next, 'Rewards', '');
+            return renderRewardScreenHtml(screen, vars, { titleFallback: screen.title || 'Rewards' });
+          } catch {
+            return `<div class="psy-wrap"><div class="psy-stage"><div class="psy-text"><h2>Rewards</h2><p>Could not render milestone.</p></div></div></div>`;
+          }
+        },
+        choices: contChoices,
+        on_start: () => {
+          try {
+            const bag = window[storeKey];
+            const state = (bag && bag.state && typeof bag.state === 'object') ? bag.state : {};
+            const q = Array.isArray(state.screen_queue) ? state.screen_queue : [];
+            const next = q[0];
+            if (next && typeof next === 'object' && next.audio_url) {
+              playRewardAudio(next.audio_url);
+            }
+          } catch {
+            // ignore
+          }
+        },
+        data: { plugin_type: 'reward-milestone' }
+      };
+
+      const popups = {
+        timeline: [rewardPopupTrial],
+        conditional_function: queueNotEmpty,
+        loop_function: queueNotEmpty
+      };
+
+      return { timeline: [trial, popups] };
+    };
+
     // Continuous mode (RDM only): run the entire expanded sequence inside one plugin trial
     // so we don't re-render the DOM between frames.
     //
     // Other task types (e.g., soc-dashboard prototype) compile as normal trials even if
     // experiment_type is set to "continuous".
     if (experimentType === 'continuous' && taskType === 'rdm') {
-      const frames = [];
+      const RdmContinuous = requirePlugin('rdm-continuous (window.jsPsychRdmContinuous)', window.jsPsychRdmContinuous);
+      const ui = isObject(config) ? config : {};
+      const updateInterval = Number(ui.update_interval ?? 100);
+
+      let segmentIndex = 0;
+      let frames = [];
+
+      const pushRdmContinuousSegment = () => {
+        if (!frames.length) return;
+        segmentIndex += 1;
+        const segFrames = frames;
+        frames = [];
+
+        timeline.push({
+          type: RdmContinuous,
+          frames: segFrames,
+          update_interval_ms: Number.isFinite(updateInterval) ? updateInterval : 100,
+          default_transition: defaultTransition,
+          dataCollection,
+          data: { plugin_type: 'rdm-continuous', segment_index: segmentIndex }
+        });
+      };
+
       for (const item of expanded) {
         const type = item.type;
 
         if (type === 'detection-response-task-start') {
+          // Ensure prior RDM frames run before starting a new DRT segment.
+          pushRdmContinuousSegment();
           timeline.push({
             type: HtmlKeyboard,
             stimulus: '',
@@ -1014,6 +1383,8 @@
         }
 
         if (type === 'detection-response-task-stop') {
+          // Ensure prior RDM frames run before stopping DRT.
+          pushRdmContinuousSegment();
           timeline.push({
             type: HtmlKeyboard,
             stimulus: '',
@@ -1037,6 +1408,7 @@
 
         if (type === 'html-keyboard-response' || type === 'instructions') {
           // Keep instructions as their own trial.
+          pushRdmContinuousSegment();
           timeline.push({
             type: HtmlKeyboard,
             stimulus: wrapMaybeFunctionStimulus(item.stimulus, item.prompt),
@@ -1051,6 +1423,7 @@
         }
 
         if (type === 'image-keyboard-response') {
+          pushRdmContinuousSegment();
           const src = resolveMaybeRelativeUrl(item.stimulus);
           const w = Number.isFinite(Number(item.stimulus_width)) ? Number(item.stimulus_width) : null;
           const h = Number.isFinite(Number(item.stimulus_height)) ? Number(item.stimulus_height) : null;
@@ -1083,8 +1456,10 @@
         }
 
         if (type === 'survey-response') {
+          pushRdmContinuousSegment();
+          const SurveyResponse = requirePlugin('survey-response (window.jsPsychSurveyResponse)', window.jsPsychSurveyResponse);
           timeline.push({
-            type: window.jsPsychSurveyResponse,
+            type: SurveyResponse,
             title: item.title || 'Survey',
             instructions: item.instructions || '',
             submit_label: item.submit_label || 'Continue',
@@ -1125,20 +1500,12 @@
           continue;
         }
 
-        // Unsupported components in continuous mode: ignore for now.
+        // Unsupported components in continuous mode: treat as a segment boundary.
+        pushRdmContinuousSegment();
       }
 
-      const ui = isObject(config) ? config : {};
-      const updateInterval = Number(ui.update_interval ?? 100);
-
-      timeline.push({
-        type: window.jsPsychRdmContinuous,
-        frames,
-        update_interval_ms: Number.isFinite(updateInterval) ? updateInterval : 100,
-        default_transition: defaultTransition,
-        dataCollection,
-        data: { plugin_type: 'rdm-continuous' }
-      });
+      // Flush trailing RDM frames.
+      pushRdmContinuousSegment();
 
       return { experimentType, timeline };
     }
@@ -1419,7 +1786,7 @@
           };
 
           timeline.push({
-            timeline: [trialTemplate],
+            timeline: [maybeWrapTrialWithRewardPopups(trialTemplate, 'pvt-trial')],
             loop_function: () => {
               return state.valid_done < state.target_valid_trials;
             }
@@ -1512,6 +1879,39 @@
         delete itemCopy.type;
 
         rewardsStoreKey = (itemCopy.store_key || '__psy_rewards').toString();
+        const continueKey = (itemCopy.continue_key || 'space').toString();
+
+        const instructionsScreen = normalizeRewardScreen(
+          itemCopy.instructions_screen,
+          itemCopy.instructions_title || 'Rewards',
+          itemCopy.instructions_template_html || ''
+        );
+
+        const summaryScreen = normalizeRewardScreen(
+          itemCopy.summary_screen,
+          itemCopy.summary_title || 'Rewards Summary',
+          itemCopy.summary_template_html || ''
+        );
+
+        const intermediateScreens = Array.isArray(itemCopy.intermediate_screens)
+          ? itemCopy.intermediate_screens.map((s) => normalizeRewardScreen(s, 'Rewards', s && (s.template_html ?? s.html) ? (s.template_html ?? s.html) : ''))
+          : (Array.isArray(itemCopy.extra_screens)
+              ? itemCopy.extra_screens.map((s) => normalizeRewardScreen(s, 'Rewards', s && (s.template_html ?? s.html) ? (s.template_html ?? s.html) : ''))
+              : []);
+
+        const milestones = Array.isArray(itemCopy.milestones)
+          ? itemCopy.milestones.map((m, idx) => {
+              const mm = (m && typeof m === 'object') ? m : {};
+              const scr = (mm.screen && typeof mm.screen === 'object') ? mm.screen : mm;
+              return {
+                id: (mm.id ?? `m${idx + 1}`).toString(),
+                trigger_type: (mm.trigger_type ?? mm.trigger ?? 'trial_count').toString(),
+                threshold: Number(mm.threshold ?? mm.value ?? 0),
+                screen: normalizeRewardScreen(scr, 'Rewards', scr && (scr.template_html ?? scr.html) ? (scr.template_html ?? scr.html) : '')
+              };
+            })
+          : [];
+
         rewardsPolicy = {
           store_key: rewardsStoreKey,
           currency_label: (itemCopy.currency_label || 'points').toString(),
@@ -1521,11 +1921,19 @@
           require_correct_for_rt: itemCopy.require_correct_for_rt === true,
           calculate_on_the_fly: itemCopy.calculate_on_the_fly !== false,
           show_summary_at_end: itemCopy.show_summary_at_end !== false,
-          continue_key: (itemCopy.continue_key || 'space').toString(),
-          instructions_title: (itemCopy.instructions_title || 'Rewards').toString(),
-          instructions_template_html: (itemCopy.instructions_template_html || '').toString(),
-          summary_title: (itemCopy.summary_title || 'Rewards Summary').toString(),
-          summary_template_html: (itemCopy.summary_template_html || '').toString()
+          continue_key: continueKey,
+
+          // v2 screen model
+          instructions_screen: instructionsScreen,
+          intermediate_screens: intermediateScreens,
+          milestones,
+          summary_screen: summaryScreen,
+
+          // legacy flat fields (kept for compatibility)
+          instructions_title: (itemCopy.instructions_title || instructionsScreen.title || 'Rewards').toString(),
+          instructions_template_html: (itemCopy.instructions_template_html || instructionsScreen.template_html || '').toString(),
+          summary_title: (itemCopy.summary_title || summaryScreen.title || 'Rewards Summary').toString(),
+          summary_template_html: (itemCopy.summary_template_html || summaryScreen.template_html || '').toString()
         };
 
         const basisLabel = scoringBasisLabel(rewardsPolicy.scoring_basis);
@@ -1544,20 +1952,7 @@
           continue_key_label: contLabel
         };
 
-        const body = rewardsPolicy.instructions_template_html
-          ? renderTemplate(rewardsPolicy.instructions_template_html, vars)
-          : `<p>You can earn <b>${escapeHtml(rewardsPolicy.currency_label)}</b>.</p>`;
-
-        const html = `
-          <div class="psy-wrap">
-            <div class="psy-stage">
-              <div class="psy-text">
-                <h2 style="margin:0 0 8px 0;">${escapeHtml(rewardsPolicy.instructions_title)}</h2>
-                <div>${body}</div>
-              </div>
-            </div>
-          </div>
-        `;
+        const html = renderRewardScreenHtml(rewardsPolicy.instructions_screen, vars, { titleFallback: rewardsPolicy.instructions_title || 'Rewards' });
 
         timeline.push({
           type: HtmlKeyboard,
@@ -1572,16 +1967,66 @@
                   total_points: 0,
                   rewarded_trials: 0,
                   eligible_trials: 0,
+                  success_streak: 0,
+                  badge_level: '',
                   events: [],
-                  computed_at_end: false
+                  computed_at_end: false,
+                  screen_queue: [],
+                  milestones_shown: {}
                 }
               };
+
+              if (rewardsPolicy.instructions_screen && rewardsPolicy.instructions_screen.audio_url) {
+                playRewardAudio(rewardsPolicy.instructions_screen.audio_url);
+              }
             } catch {
               // ignore
             }
           },
           data: { plugin_type: type }
         });
+
+        // Additional screens shown once between instructions and first task trial.
+        if (Array.isArray(rewardsPolicy.intermediate_screens) && rewardsPolicy.intermediate_screens.length) {
+          for (let i = 0; i < rewardsPolicy.intermediate_screens.length; i++) {
+            const scr = rewardsPolicy.intermediate_screens[i];
+            timeline.push({
+              type: HtmlKeyboard,
+              stimulus: () => {
+                try {
+                  const bag = window[rewardsStoreKey];
+                  const policy = bag && bag.policy ? bag.policy : rewardsPolicy;
+                  const vars2 = {
+                    currency_label: (policy.currency_label || 'points').toString(),
+                    scoring_basis: policy.scoring_basis,
+                    scoring_basis_label: scoringBasisLabel(policy.scoring_basis),
+                    rt_threshold_ms: Number.isFinite(Number(policy.rt_threshold_ms)) ? Number(policy.rt_threshold_ms) : 0,
+                    points_per_success: Number.isFinite(Number(policy.points_per_success)) ? Number(policy.points_per_success) : 0,
+                    continue_key: policy.continue_key,
+                    continue_key_label: continueKeyLabel(policy.continue_key),
+                    total_points: 0,
+                    rewarded_trials: 0,
+                    eligible_trials: 0,
+                    success_streak: 0,
+                    badge_level: ''
+                  };
+                  return renderRewardScreenHtml(scr, vars2, { titleFallback: scr.title || 'Rewards' });
+                } catch {
+                  return renderRewardScreenHtml(scr, vars, { titleFallback: scr.title || 'Rewards' });
+                }
+              },
+              choices: contChoices,
+              on_start: () => {
+                try {
+                  if (scr && scr.audio_url) playRewardAudio(scr.audio_url);
+                } catch {
+                  // ignore
+                }
+              },
+              data: { plugin_type: 'reward-intermediate', index: i }
+            });
+          }
+        }
         continue;
       }
 
@@ -1678,7 +2123,7 @@
           experiment_type: experimentType
         }), response);
 
-        timeline.push({
+        const trial = {
           type: Rdm,
           rdm,
           response,
@@ -1693,7 +2138,8 @@
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -1701,13 +2147,14 @@
       if (type === 'flanker-trial') {
         const Flanker = requirePlugin('flanker (window.jsPsychFlanker)', window.jsPsychFlanker);
         const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
-        timeline.push({
+        const trial = {
           ...item,
           type: Flanker,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
           ...(onFinish ? { on_finish: onFinish } : {}),
           data: { plugin_type: type, task_type: 'flanker' }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -1715,13 +2162,14 @@
       if (type === 'sart-trial') {
         const Sart = requirePlugin('sart (window.jsPsychSart)', window.jsPsychSart);
         const onFinish = maybeWrapOnFinishWithRewards(typeof item.on_finish === 'function' ? item.on_finish : null, type);
-        timeline.push({
+        const trial = {
           ...item,
           type: Sart,
           post_trial_gap: Number.isFinite(Number(item.iti_ms)) ? Number(item.iti_ms) : 0,
           ...(onFinish ? { on_finish: onFinish } : {}),
           data: { plugin_type: type, task_type: 'sart' }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -1736,7 +2184,7 @@
         itemCopy.render_mode = rm;
         if (rm !== 'custom_html') delete itemCopy.stimulus_template_html;
 
-        timeline.push({
+        const trial = {
           ...itemCopy,
           type: Nback,
           ...(onFinish ? { on_finish: onFinish } : {}),
@@ -1747,7 +2195,8 @@
             _sequence_seed: Number.isFinite(item._sequence_seed) ? item._sequence_seed : null,
             _sequence_index: Number.isFinite(item._sequence_index) ? item._sequence_index : null
           }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -1771,12 +2220,13 @@
         itemCopy.render_mode = renderMode;
         if (renderMode !== 'custom_html') delete itemCopy.stimulus_template_html;
 
-        timeline.push({
+        const trial = {
           type: NbackContinuous,
           ...itemCopy,
           ...(onFinish ? { on_finish: onFinish } : {}),
           data: { plugin_type: 'nback-continuous', task_type: 'nback', original_type: type }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, 'nback-continuous'));
         continue;
       }
 
@@ -1792,7 +2242,7 @@
         delete itemCopy.on_start;
         delete itemCopy.on_finish;
 
-        timeline.push({
+        const trial = {
           type: Gabor,
 
           // Inherit experiment-wide gabor settings by default.
@@ -1810,7 +2260,8 @@
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -1894,7 +2345,7 @@
 
         const inkHex = findInkHex(inkName, item.ink_color_hex);
 
-        timeline.push({
+        const trial = {
           type: Stroop,
 
           ...itemCopy,
@@ -1921,7 +2372,8 @@
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -2015,7 +2467,7 @@
         const congruency = (stimulusSide === correctSide) ? 'congruent' : 'incongruent';
         const stimulusHex = findStimulusHex(stimulusColorName, item.stimulus_color_hex);
 
-        timeline.push({
+        const trial = {
           type: Simon,
 
           ...itemCopy,
@@ -2045,7 +2497,8 @@
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -2115,7 +2568,7 @@
           ? Number(item.iti_ms)
           : (Number.isFinite(Number(pvtDefaults.iti_ms)) ? Number(pvtDefaults.iti_ms) : baseIti);
 
-        timeline.push({
+        const trial = {
           type: Pvt,
 
           ...itemCopy,
@@ -2138,7 +2591,8 @@
             _generated_from_block: !!item._generated_from_block,
             _block_index: Number.isFinite(item._block_index) ? item._block_index : null
           }
-        });
+        };
+        timeline.push(maybeWrapTrialWithRewardPopups(trial, type));
         continue;
       }
 
@@ -2198,28 +2652,42 @@
               continue_key_label: continueKeyLabel(policy.continue_key),
               total_points: Number.isFinite(Number(state.total_points)) ? Number(state.total_points) : 0,
               rewarded_trials: Number.isFinite(Number(state.rewarded_trials)) ? Number(state.rewarded_trials) : 0,
-              eligible_trials: Number.isFinite(Number(state.eligible_trials)) ? Number(state.eligible_trials) : events.length
+              eligible_trials: Number.isFinite(Number(state.eligible_trials)) ? Number(state.eligible_trials) : events.length,
+              success_streak: Number.isFinite(Number(state.success_streak)) ? Number(state.success_streak) : 0,
+              badge_level: (state.badge_level ?? '')
             };
 
-            const body = policy.summary_template_html
-              ? renderTemplate(policy.summary_template_html, vars)
-              : `<p><b>Total earned</b>: ${escapeHtml(String(vars.total_points))} ${escapeHtml(vars.currency_label)}</p>`;
+            const summaryScreen = normalizeRewardScreen(
+              policy.summary_screen,
+              policy.summary_title || 'Rewards Summary',
+              policy.summary_template_html || ''
+            );
 
-            return `
-              <div class="psy-wrap">
-                <div class="psy-stage">
-                  <div class="psy-text">
-                    <h2 style="margin:0 0 8px 0;">${escapeHtml(policy.summary_title || 'Rewards Summary')}</h2>
-                    <div>${body}</div>
-                  </div>
-                </div>
-              </div>
-            `;
+            // If template is still empty, provide a minimal fallback.
+            if (!summaryScreen.template_html) {
+              summaryScreen.template_html = '<p><b>Total earned</b>: {{total_points}} {{currency_label}}</p>\n<p><b>Rewarded trials</b>: {{rewarded_trials}} / {{eligible_trials}}</p>\n<p>Press {{continue_key_label}} to finish.</p>';
+            }
+
+            return renderRewardScreenHtml(summaryScreen, vars, { titleFallback: summaryScreen.title || 'Rewards Summary' });
           } catch (e) {
             return `<div class="psy-wrap"><div class="psy-stage"><div class="psy-text"><h2>Rewards Summary</h2><p>Could not compute rewards.</p></div></div></div>`;
           }
         },
         choices: contChoices,
+        on_start: () => {
+          try {
+            const bag = window[storeKey];
+            const policy = bag && bag.policy ? bag.policy : rewardsPolicy;
+            const summaryScreen = normalizeRewardScreen(
+              policy.summary_screen,
+              policy.summary_title || 'Rewards Summary',
+              policy.summary_template_html || ''
+            );
+            if (summaryScreen.audio_url) playRewardAudio(summaryScreen.audio_url);
+          } catch {
+            // ignore
+          }
+        },
         data: { plugin_type: 'reward-summary' }
       });
     }

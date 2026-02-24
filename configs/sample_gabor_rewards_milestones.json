@@ -1,0 +1,101 @@
+{
+  "task_type": "gabor",
+  "experiment_type": "trial-based",
+
+  "reward_settings": {
+    "enabled": true,
+
+    "currency_label": "points",
+    "scoring_basis": "accuracy",
+    "points_per_success": 1,
+    "rt_threshold_ms": 800,
+    "require_correct_for_rt": false,
+
+    "calculate_on_the_fly": true,
+    "show_summary_at_end": true,
+    "continue_key": "space",
+
+    "instructions_screen": {
+      "title": "Rewards",
+      "template_html": "<p>You can earn <b>{{currency_label}}</b> during this study.</p>\n<ul>\n  <li><b>Basis</b>: {{scoring_basis_label}}</li>\n  <li><b>Points per success</b>: {{points_per_success}}</li>\n</ul>\n<p><b>Milestones</b>:</p>\n<ul>\n  <li>After <b>2 trials</b> (always triggers)</li>\n  <li>After <b>2 correct trials in a row</b> (requires correct responses)</li>\n</ul>\n<p>Press {{continue_key_label}} to begin.</p>",
+      "image_url": "",
+      "audio_url": ""
+    },
+
+    "intermediate_screens": [
+      {
+        "title": "Reminder",
+        "template_html": "<p>Try to respond accurately. The milestone popup should appear <b>immediately after the trial</b> that achieves it.</p>\n<p>Press {{continue_key_label}} to continue.</p>",
+        "image_url": "",
+        "audio_url": ""
+      }
+    ],
+
+    "milestones": [
+      {
+        "id": "m_trials_2",
+        "trigger_type": "trial_count",
+        "threshold": 2,
+        "screen": {
+          "title": "Milestone",
+          "template_html": "<p><b>Milestone reached:</b> {{eligible_trials}} trials completed.</p>\n<p>Total so far: <b>{{total_points}}</b> {{currency_label}}</p>\n<p>Press {{continue_key_label}} to continue.</p>",
+          "image_url": "",
+          "audio_url": ""
+        }
+      },
+      {
+        "id": "m_streak_2",
+        "trigger_type": "success_streak",
+        "threshold": 2,
+        "screen": {
+          "title": "Streak!",
+          "template_html": "<p><b>Nice!</b> You have a success streak of <b>{{success_streak}}</b>.</p>\n<p>Total so far: <b>{{total_points}}</b> {{currency_label}}</p>\n<p>Press {{continue_key_label}} to continue.</p>",
+          "image_url": "",
+          "audio_url": ""
+        }
+      }
+    ],
+
+    "summary_screen": {
+      "title": "Rewards Summary",
+      "template_html": "<p><b>Total earned</b>: {{total_points}} {{currency_label}}</p>\n<p><b>Rewarded trials</b>: {{rewarded_trials}} / {{eligible_trials}}</p>\n<p>Press {{continue_key_label}} to finish.</p>",
+      "image_url": "",
+      "audio_url": ""
+    }
+  },
+
+  "gabor_settings": {
+    "spatial_frequency_cyc_per_px": 0.08,
+    "grating_waveform": "sinusoidal",
+
+    "fixation_ms": 200,
+    "placeholders_ms": 200,
+    "cue_ms": 150,
+    "cue_delay_min_ms": 50,
+    "cue_delay_max_ms": 150,
+    "stimulus_duration_ms": 80,
+    "mask_duration_ms": 60,
+    "response_window_ms": 1200
+  },
+
+  "timeline": [
+    {
+      "type": "instructions",
+      "stimulus": "<div style=\"max-width: 780px; margin:0 auto; text-align:left;\">\n<h3>Gabor + Rewards (Milestone validation)</h3>\n<p>This config validates that:</p>\n<ol>\n  <li>Rewards instructions show first</li>\n  <li>An additional screen shows once before trials</li>\n  <li>A milestone popup appears immediately after trial #2</li>\n  <li>A streak milestone appears after 2 correct trials in a row (if you respond correctly twice)</li>\n  <li>A summary screen appears at the end</li>\n</ol>\n<p>Press any key to begin.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+
+    {
+      "type": "block",
+      "component_type": "gabor-trial",
+      "length": 6,
+      "seed": 24680,
+      "parameter_windows": {
+        "target_tilt_deg": { "min": 5, "max": 20 }
+      },
+      "parameter_values": {
+        "response_task": "discriminate_tilt"
+      }
+    }
+  ]
+}

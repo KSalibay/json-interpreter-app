@@ -230,7 +230,14 @@
     return Math.cos(phaseRad);
   }
 
-  function makeGaborImageData(ctx, sizePx, orientationDeg, { freq = 0.06, waveform = 'sinusoidal', sigmaFrac = 6, contrast = 0.95, phase = 0 } = {}) {
+  function makeGaborImageData(ctx, sizePx, orientationDeg, {
+    freq = 0.06,
+    waveform = 'sinusoidal',
+    sigmaFrac = 6,
+    contrast = 0.95,
+    phase = 0,
+    debugStats = false
+  } = {}) {
     const w = Math.max(8, Math.floor(sizePx));
     const h = w;
     const r = Math.floor(w / 2);
@@ -246,6 +253,10 @@
     const cosT = Math.cos(theta);
     const sinT = Math.sin(theta);
     const twoSigma2 = 2 * sigma * sigma;
+
+    let minV = 255;
+    let maxV = 0;
+    let insideCount = 0;
 
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
@@ -272,18 +283,49 @@
         data[idx + 1] = v;
         data[idx + 2] = v;
         data[idx + 3] = 255;
+
+        if (debugStats) {
+          insideCount += 1;
+          if (Number.isFinite(v)) {
+            if (v < minV) minV = v;
+            if (v > maxV) maxV = v;
+          }
+        }
       }
     }
 
-    return { img, r };
+    const stats = debugStats
+      ? {
+          safe_freq_cyc_per_px: safeFreq,
+          min_v: (insideCount > 0 ? minV : null),
+          max_v: (insideCount > 0 ? maxV : null),
+          range_v: (insideCount > 0 ? (maxV - minV) : null),
+          inside_px: insideCount
+        }
+      : null;
+
+    return { img, r, stats };
   }
 
-  function drawGaborPatch(ctx, centerX, centerY, sizePx, orientationDeg, { spatialFrequency, gratingWaveform, patchBorder } = {}) {
-    const { img, r } = makeGaborImageData(ctx, sizePx, orientationDeg, {
+  function drawGaborPatch(ctx, centerX, centerY, sizePx, orientationDeg, { spatialFrequency, gratingWaveform, patchBorder, debug } = {}) {
+    const { img, r, stats } = makeGaborImageData(ctx, sizePx, orientationDeg, {
       freq: spatialFrequency,
-      waveform: gratingWaveform
+      waveform: gratingWaveform,
+      debugStats: debug === true
     });
     ctx.putImageData(img, Math.round(centerX - r), Math.round(centerY - r));
+
+    if (debug === true && stats) {
+      const txt = `freq=${Number.isFinite(stats.safe_freq_cyc_per_px) ? stats.safe_freq_cyc_per_px.toFixed(4) : 'na'} cyc/px  range=${stats.range_v}`;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(Math.round(centerX - r) + 6, Math.round(centerY + r) - 28, 240, 22);
+      ctx.fillStyle = 'rgba(255,255,255,0.88)';
+      ctx.font = '14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(txt, Math.round(centerX - r) + 10, Math.round(centerY + r) - 12);
+      ctx.restore();
+    }
 
     const enabled = patchBorder?.enabled !== false;
     const lineWidth = clamp(patchBorder?.widthPx ?? 2, 0, 50);
@@ -358,7 +400,8 @@
     patchBorder,
     showCue,
     showStimulus,
-    showMask
+    showMask,
+    debug
   }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -413,8 +456,8 @@
 
     // Stimulus / mask
     if (showStimulus) {
-      drawGaborPatch(ctx, leftCx, cy, patchSize, leftAngle, { spatialFrequency, gratingWaveform, patchBorder });
-      drawGaborPatch(ctx, rightCx, cy, patchSize, rightAngle, { spatialFrequency, gratingWaveform, patchBorder });
+      drawGaborPatch(ctx, leftCx, cy, patchSize, leftAngle, { spatialFrequency, gratingWaveform, patchBorder, debug });
+      drawGaborPatch(ctx, rightCx, cy, patchSize, rightAngle, { spatialFrequency, gratingWaveform, patchBorder, debug });
     } else if (showMask) {
       drawNoiseMask(ctx, leftCx, cy, patchSize, { patchBorder });
       drawNoiseMask(ctx, rightCx, cy, patchSize, { patchBorder });
@@ -426,11 +469,26 @@
     // Optional subtle label for debugging stages (off by default; can be enabled by CSS later)
     if (phase) {
       ctx.save();
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.font = '12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
+      const isDebug = debug === true;
+      ctx.fillStyle = isDebug ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.12)';
+      ctx.font = isDebug
+        ? '18px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'
+        : '12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
       ctx.textAlign = 'left';
       ctx.fillText(String(phase), 10, h - 10);
       ctx.restore();
+    }
+  }
+
+  function getGaborDebugEnabled(trial) {
+    try {
+      if (trial && trial.gabor_debug_enabled === true) return true;
+      const qs = (window && window.location && typeof window.location.search === 'string') ? window.location.search : '';
+      // `debug=1` is already used by the Interpreter for local data-download; it also
+      // makes sense to slow Gabor down in that mode for visual inspection.
+      return /[?&](?:debug|gabor_debug|debug_gabor)=1(?:&|$)/i.test(qs);
+    } catch {
+      return false;
     }
   }
 
@@ -440,6 +498,8 @@
     }
 
     trial(display_element, trial) {
+      const debugGabor = getGaborDebugEnabled(trial);
+
       const responseTask = (trial.response_task || 'discriminate_tilt').toString();
       const leftKey = normalizeKeyName(trial.left_key || 'f');
       const rightKey = normalizeKeyName(trial.right_key || 'j');
@@ -479,9 +539,16 @@
       const cueMs = Math.max(0, Number(trial.cue_ms ?? 300) || 0);
       const cueDelayMin = Math.max(0, Number(trial.cue_delay_min_ms ?? 100) || 0);
       const cueDelayMax = Math.max(0, Number(trial.cue_delay_max_ms ?? 200) || 0);
-      const stimMs = Math.max(0, Number(trial.stimulus_duration_ms ?? 67) || 0);
-      const maskMs = Math.max(0, Number(trial.mask_duration_ms ?? 67) || 0);
-      const responseWindowMs = Math.max(0, Number(trial.response_window_ms ?? 1500) || 0);
+
+      // Default stimulus/mask durations are intentionally brief.
+      // In debug mode, enforce a minimum so it's perceptually obvious whether the patch renders.
+      const stimMs0 = Math.max(0, Number(trial.stimulus_duration_ms ?? 67) || 0);
+      const maskMs0 = Math.max(0, Number(trial.mask_duration_ms ?? 67) || 0);
+      const responseWindowMs0 = Math.max(0, Number(trial.response_window_ms ?? 1500) || 0);
+
+      const stimMs = debugGabor ? Math.max(stimMs0, 350) : stimMs0;
+      const maskMs = debugGabor ? Math.max(maskMs0, 250) : maskMs0;
+      const responseWindowMs = debugGabor ? Math.max(responseWindowMs0, 2000) : responseWindowMs0;
 
       const highColor = (trial.high_value_color ?? '#00aa00').toString();
       const lowColor = (trial.low_value_color ?? '#0066ff').toString();
@@ -664,7 +731,8 @@
           patchBorder,
           showCue: !!opts?.showCue,
           showStimulus: !!opts?.showStimulus,
-          showMask: !!opts?.showMask
+          showMask: !!opts?.showMask,
+          debug: debugGabor
         });
       };
 

@@ -1,0 +1,28 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "soc-dashboard",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "<div style=\"max-width: 900px; margin: 0 auto; text-align: left;\">\n  <h2>SOC Dashboard (Auto-sequence demo)</h2>\n  <p>This config has <b>num_tasks=3</b> and provides <b>no per-subtask scheduling</b>.</p>\n  <p>The interpreter should auto-sequence the task windows across the full trial duration (one visible at a time).</p>\n  <p>Run with <code>?soc_debug=1</code> or <code>?debug=1</code> to see extra debug labels.</p>\n  <p>Press any key to start.</p>\n</div>",
+      "choices": "ALL_KEYS"
+    },
+    {
+      "type": "soc-dashboard",
+      "title": "SOC Dashboard",
+      "trial_duration_ms": 15000,
+      "end_key": "escape",
+      "default_app": "soc",
+      "num_tasks": 3,
+      "icons_clickable": true,
+      "log_icon_clicks": true,
+      "icon_clicks_are_distractors": true
+    }
+  ]
+}

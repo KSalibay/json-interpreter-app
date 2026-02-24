@@ -1,7 +1,7 @@
 (function () {
   try {
     window.__COGFLOW_INTERPRETER_VERSION = '20260223-16';
-    console.log('[Interpreter] main.js loaded', window.__COGFLOW_INTERPRETER_VERSION);
+      console.log('[Interpreter] main.js loaded', '20260224-1');
   } catch {
     // ignore
   }
@@ -574,44 +574,53 @@
   }
 
   function validateTimelinePlugins(timeline, label) {
-    const tl = Array.isArray(timeline) ? timeline : [];
     const problems = [];
     const unwrapped = [];
 
-    for (let i = 0; i < tl.length; i++) {
-      const node = tl[i];
-      if (!node || typeof node !== 'object') continue;
+    const walk = (maybeTimeline, path) => {
+      const tl = Array.isArray(maybeTimeline) ? maybeTimeline : [];
+      for (let i = 0; i < tl.length; i++) {
+        const node = tl[i];
+        if (!node || typeof node !== 'object') continue;
 
-      let t = node.type;
+        const nodePath = path ? `${path}[${i}]` : `[${i}]`;
 
-      // Some UMD builds expose plugins as { default: PluginClass }.
-      if (t && typeof t === 'object' && typeof t.default === 'function') {
-        node.type = t.default;
-        t = node.type;
-        unwrapped.push({ index: i, from: 'object.default', name: t && t.name ? t.name : null });
-      }
-
-      // jsPsych's runtime requirement is essentially that `type` is a function/class.
-      // (We still log if `info` is missing, but don't block execution.)
-      const ok = typeof t === 'function';
-      if (ok) {
-        if (!(t && t.info && typeof t.info === 'object')) {
-          // Warn-only: v9+ will require info.version/info.data, but runtime may still proceed.
-          // This keeps validation from becoming a false positive.
-          // (We already patched our custom plugins to include these fields.)
+        // jsPsych timeline nodes can be wrappers like:
+        // { timeline: [...], conditional_function, loop_function, repetitions, ... }
+        // These nodes are valid even without a `type`. Validate their children instead.
+        if (Array.isArray(node.timeline)) {
+          walk(node.timeline, `${nodePath}.timeline`);
         }
-        continue;
-      }
 
-      problems.push({
-        index: i,
-        type_kind: typeof t,
-        type_value: (typeof t === 'string') ? t : (t === null ? 'null' : (t === undefined ? 'undefined' : (t && t.name ? t.name : 'non-string'))),
-        has_info: !!(t && t.info),
-        data_plugin_type: (node.data && typeof node.data === 'object') ? node.data.plugin_type : null,
-        data_task_type: (node.data && typeof node.data === 'object') ? node.data.task_type : null
-      });
-    }
+        // Only validate nodes that explicitly declare a plugin `type`.
+        // (Wrapper nodes, variable definitions, etc. may omit it.)
+        if (!Object.prototype.hasOwnProperty.call(node, 'type')) continue;
+
+        let t = node.type;
+
+        // Some UMD builds expose plugins as { default: PluginClass }.
+        if (t && typeof t === 'object' && typeof t.default === 'function') {
+          node.type = t.default;
+          t = node.type;
+          unwrapped.push({ path: nodePath, from: 'object.default', name: t && t.name ? t.name : null });
+        }
+
+        // jsPsych's runtime requirement is essentially that `type` is a function/class.
+        const ok = typeof t === 'function';
+        if (ok) continue;
+
+        problems.push({
+          path: nodePath,
+          type_kind: typeof t,
+          type_value: (typeof t === 'string') ? t : (t === null ? 'null' : (t === undefined ? 'undefined' : (t && t.name ? t.name : 'non-string'))),
+          has_info: !!(t && t.info),
+          data_plugin_type: (node.data && typeof node.data === 'object') ? node.data.plugin_type : null,
+          data_task_type: (node.data && typeof node.data === 'object') ? node.data.task_type : null
+        });
+      }
+    };
+
+    walk(timeline, '');
 
     if (unwrapped.length > 0) {
       console.groupCollapsed(`[Interpreter] Unwrapped plugin defaults (${label || 'timeline'})`);
@@ -633,7 +642,25 @@
       }
 
       try {
-        const badNode = tl[first.index];
+        // Try to show the offending node (best effort; path may be nested).
+        const getByPath = (root, p) => {
+          const parts = (p || '').split('.').filter(Boolean);
+          let cur = root;
+          for (const part of parts) {
+            const m = /^(.*)\[(\d+)\]$/.exec(part);
+            if (m) {
+              const key = m[1];
+              const idx = Number(m[2]);
+              cur = key ? (cur && cur[key]) : cur;
+              cur = Array.isArray(cur) ? cur[idx] : undefined;
+              continue;
+            }
+            cur = cur ? cur[part] : undefined;
+          }
+          return cur;
+        };
+
+        const badNode = getByPath({ timeline: Array.isArray(timeline) ? timeline : [] }, `timeline${first.path || ''}`);
         const safe = JSON.parse(JSON.stringify(badNode, (k, v) => (typeof v === 'function' ? `[Function ${v.name || 'anonymous'}]` : v)));
         console.log('Offending node (safe json):', safe);
       } catch (e) {
@@ -642,8 +669,8 @@
 
       console.groupEnd();
 
-      setStatus(`Invalid plugin type at index ${first.index} (typeof=${first.type_kind}, value=${String(first.type_value)}). See console for details.`);
-      throw new Error(`Invalid jsPsych plugin type in compiled timeline at index ${first.index}`);
+      setStatus(`Invalid plugin type at ${first.path || '(unknown path)'} (typeof=${first.type_kind}, value=${String(first.type_value)}). See console for details.`);
+      throw new Error(`Invalid jsPsych plugin type in compiled timeline at ${first.path || '(unknown path)'}`);
     }
   }
 

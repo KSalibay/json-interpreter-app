@@ -1,0 +1,123 @@
+{
+  "experiment_type": "continuous",
+  "task_type": "rdm",
+  "data_collection": {
+    "reaction-time": true,
+    "accuracy": true,
+    "correctness": true,
+    "eye-tracking": false
+  },
+  "timeline": [
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "Continuous RDM + DRT demo. Respond by moving your mouse to the side of the aperture corresponding to dot direction. Press any key to continue.",
+      "choices": "ALL_KEYS",
+      "response_ends_trial": true
+    },
+    {
+      "type": "detection-response-task-start",
+      "segment_label": "rdm-continuous",
+      "response_key": "space",
+      "min_iti_ms": 2500,
+      "max_iti_ms": 4500,
+      "stimulus_duration_ms": 200,
+      "min_rt_ms": 100,
+      "max_rt_ms": 1200,
+      "stimulus_type": "square",
+      "stimulus_color": "#ff3b3b",
+      "location": "top-right",
+      "size_px": 16
+    },
+    {
+      "type": "block",
+      "component_type": "rdm-dot-groups",
+      "length": 6,
+      "sampling_mode": "per-trial",
+      "parameter_windows": {
+        "group_1_percentage": { "min": 40, "max": 60 },
+        "group_1_coherence": { "min": 0.1, "max": 0.5 },
+        "group_1_speed": { "min": 4, "max": 10 },
+        "group_2_coherence": { "min": 0.5, "max": 0.9 },
+        "group_2_speed": { "min": 4, "max": 10 }
+      },
+      "parameter_values": {
+        "group_1_direction": [0, 180],
+        "group_2_direction": [0, 180],
+        "group_1_color": "#ff0066",
+        "group_2_color": "#0066ff",
+        "transition_duration": 350,
+        "transition_type": "both"
+      },
+      "response_parameters_override": {
+        "require_response": true,
+        "response_device": "mouse",
+        "end_condition_on_response": false,
+        "mouse_response": {
+          "enabled": true,
+          "mode": "aperture-segments",
+          "segments": 2,
+          "start_angle_deg": 270,
+          "selection_mode": "hover"
+        },
+        "target_group": "group_2",
+        "cue_border": {
+          "enabled": true,
+          "mode": "target-group-color",
+          "target_group": "group_2",
+          "color": "#0066ff",
+          "width": 4
+        }
+      }
+    },
+    {
+      "type": "detection-response-task-stop"
+    },
+    {
+      "type": "html-keyboard-response",
+      "stimulus": "Demo complete. Press any key to finish and export.",
+      "choices": "ALL_KEYS",
+      "response_ends_trial": true
+    }
+  ],
+  "display_parameters": {
+    "canvas_width": 600,
+    "canvas_height": 600,
+    "background_color": "#404040"
+  },
+  "aperture_parameters": {
+    "shape": "circle",
+    "diameter": 350,
+    "center_x": 300,
+    "center_y": 300
+  },
+  "dot_parameters": {
+    "total_dots": 150,
+    "dot_size": 4,
+    "dot_color": "#ffffff",
+    "lifetime_frames": 60
+  },
+  "motion_parameters": {
+    "coherence": 0.5,
+    "direction": 0,
+    "speed": 5,
+    "noise_type": "random_direction"
+  },
+  "timing_parameters": {
+    "fixation_duration": 500,
+    "stimulus_duration": 1500,
+    "response_deadline": 2500,
+    "inter_trial_interval": 1200
+  },
+  "response_parameters": {
+    "require_response": true,
+    "response_device": "mouse",
+    "end_condition_on_response": false,
+    "mouse_response": {
+      "enabled": true,
+      "mode": "aperture-segments",
+      "segments": 2,
+      "start_angle_deg": 270,
+      "selection_mode": "hover"
+    }
+  }
+}

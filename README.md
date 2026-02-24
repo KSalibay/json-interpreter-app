@@ -84,6 +84,11 @@ If the result-file upload fails for any reason, it falls back to submitting the 
 - N-back support added end-to-end (compilation + runtime rendering) for both **trial-based** and **continuous** N-back exports.
 - Fixation cross support added as an ITI visual marker via `show_fixation_cross_between_trials`.
 - UI/theming improvements aligned with the CogFlow palette and typography updates (to match Builder exports and improve readability).
+- Rewards **v2** supported end-to-end (screens, milestones, summary) during compilation + runtime.
+- Token Store runs hardened: jsPsych wrapper timeline nodes (with `timeline` but no `type`) are valid and no longer fail plugin validation.
+- Continuous RDM compilation preserves ordering by flushing contiguous RDM frames into in-place `rdm-continuous` segments (so `detection-response-task-start/stop` can bracket the intended segment).
+- Gabor visibility debugging: `?debug=1` / `?gabor_debug=1` slows stimulus/mask; debug overlay shows the effective spatial frequency.
+- Fixed a block-window rounding pitfall: `spatial_frequency_cyc_per_px` is **not** rounded to an integer (otherwise values like 0.06 become 0 and the Gabor looks like a circular gradient).
 
 ## How it loads configs
 
@@ -134,6 +139,12 @@ Validation (local):
   - Gabor QUEST: `.../index.html?id=sample_adaptive_gabor_quest&validate=1&debug=1`
   - RDM staircase: `.../index.html?id=sample_adaptive_rdm_staircase&validate=1&debug=1`
 
+Gabor-specific debug:
+
+- `&gabor_debug=1` (or `&debug=1`) enforces longer stimulus/mask durations for visibility.
+- In debug mode, each stimulus patch overlays `freq=... cyc/px`.
+  - If it shows `freq=0.0000`, your config likely rounded the spatial frequency somewhere upstream (common cause: treating `spatial_frequency_cyc_per_px` like a pixel integer).
+
 If Live Server doesn't expose a directory listing, generate/update the manifest:
 - PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/generate-manifest.ps1`
 
@@ -150,6 +161,7 @@ The interpreter includes a custom jsPsych plugin that renders a multi-window “
 - `.../index.html?id=sample_soc_sart_10s&debug=1`
 - `.../index.html?id=sample_soc_nback_10s&debug=1`
 - `.../index.html?id=sample_soc_pvt_like_01&debug=1`
+- Auto-sequence demo (no per-subtask schedule): `.../index.html?id=sample_soc_3tasks_sequence&soc_debug=1`
 - Overlap demo (scheduled windows): `.../index.html?id=sample_soc_nback_sart_overlap&debug=1`
 
 Optional SOC debug overlay:
